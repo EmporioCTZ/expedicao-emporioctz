@@ -103,6 +103,18 @@
     .mkt-btn .mi { display: block; font-size: 20px; margin-bottom: 3px; }
     .mkt-btn.selected { border-color: var(--brand); background: var(--brand); color: white; }
 
+    /* ── SCAN MODE TOGGLE ── */
+    .scan-mode-toggle {
+      display: flex; gap: 8px; max-width: 420px; margin: 0 auto 14px;
+    }
+    .scan-mode-btn {
+      flex: 1; padding: 10px; border: 2px solid #e0e0e0; border-radius: 10px;
+      background: white; font-size: 12px; font-weight: 700; color: #888;
+      cursor: pointer; text-align: center; transition: all 0.15s;
+    }
+    .scan-mode-btn.selected { border-color: var(--brand); background: var(--brand); color: white; }
+    .scan-mode-btn.disabled-mode { opacity: 0.4; cursor: not-allowed; }
+
     /* ── SCANNER ── */
     #reader {
       max-width: 420px; margin: 0 auto 12px; border-radius: 16px; overflow: hidden;
@@ -272,6 +284,16 @@
     <button class="mkt-btn" data-mkt="Outros" onclick="selectMkt(this)"><span class="mi">🏪</span>Outros</button>
   </div>
 
+  <!-- SCAN MODE TOGGLE -->
+  <div class="scan-mode-toggle">
+    <button class="scan-mode-btn selected" id="modeQR" onclick="setScanMode('qr', this)">
+      📱 QR Code
+    </button>
+    <button class="scan-mode-btn" id="modeBarcode" onclick="setScanMode('barcode', this)">
+      ▌▌ Código de Barras
+    </button>
+  </div>
+
   <div id="reader"></div>
   <div id="scanStatus" class="scan-status waiting">📷 Selecione o marketplace e inicie o scanner</div>
   <button class="btn btn-primary" id="btnCamera" onclick="toggleScanner()">▶️ Iniciar Scanner</button>
@@ -361,6 +383,7 @@ let packages = JSON.parse(localStorage.getItem('pkgs_ctz2') || '[]');
 let funcionario = localStorage.getItem('func_ctz') || '';
 let selectedMkt = 'Shopee';
 let currentFilter = 'Todos';
+let scanMode = 'qr'; // 'qr' | 'barcode'
 let sessionStart = Date.now();
 let scannerActive = false;
 let html5QrCode = null;
@@ -422,11 +445,35 @@ function showPage(name, btn) {
   if (name !== 'scanner' && scannerActive) stopScanner();
 }
 
+// ── SCAN MODE ──────────────────────────────────────────
+function setScanMode(mode, btn) {
+  if (btn.classList.contains('disabled-mode')) return;
+  scanMode = mode;
+  document.querySelectorAll('.scan-mode-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  if (scannerActive) { stopScanner().then(() => toggleScanner()); }
+}
+
+function updateScanModeForMkt(mkt) {
+  const barcodeBtn = document.getElementById('modeBarcode');
+  if (mkt === 'Mercado Livre') {
+    barcodeBtn.classList.add('disabled-mode');
+    barcodeBtn.title = 'Mercado Livre: use apenas QR Code';
+    scanMode = 'qr';
+    document.querySelectorAll('.scan-mode-btn').forEach(b => b.classList.remove('selected'));
+    document.getElementById('modeQR').classList.add('selected');
+  } else {
+    barcodeBtn.classList.remove('disabled-mode');
+    barcodeBtn.title = '';
+  }
+}
+
 // ── MARKETPLACE ────────────────────────────────────────
 function selectMkt(btn) {
   document.querySelectorAll('.mkt-btn').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
   selectedMkt = btn.dataset.mkt;
+  updateScanModeForMkt(selectedMkt);
 }
 
 // ── SCANNER ────────────────────────────────────────────
@@ -434,23 +481,23 @@ async function toggleScanner() {
   if (scannerActive) { await stopScanner(); return; }
   try {
     html5QrCode = new Html5Qrcode('reader');
+    const QR_FORMATS = [
+      Html5QrcodeSupportedFormats.QR_CODE,
+      Html5QrcodeSupportedFormats.DATA_MATRIX,
+    ];
+    const BAR_FORMATS = [
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.UPC_A,
+      Html5QrcodeSupportedFormats.UPC_E,
+      Html5QrcodeSupportedFormats.ITF,
+    ];
+    const formats = scanMode === 'qr' ? QR_FORMATS : BAR_FORMATS;
     await html5QrCode.start(
       { facingMode: 'environment' },
-      {
-        fps: 10,
-        qrbox: { width: 260, height: 260 },
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.QR_CODE,
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.UPC_E,
-          Html5QrcodeSupportedFormats.ITF,
-          Html5QrcodeSupportedFormats.DATA_MATRIX,
-        ]
-      },
+      { fps: 10, qrbox: { width: 260, height: 260 }, formatsToSupport: formats },
       (decodedText) => addPackage(decodedText),
       () => {} // ignore scan errors
     );
@@ -484,12 +531,49 @@ function manualEntry() {
   if (code && code.trim()) addPackage(code.trim());
 }
 
+// ── LIMPEZA DE CÓDIGO ─────────────────────────────────
+function cleanCode(raw) {
+  const s = raw.trim();
+  // Extrai campo "id" de JSON: {"id":"47207450494","t":"lm"} → 47207450494
+  if (s.includes('{') && s.includes('}')) {
+    try {
+      const obj = JSON.parse(s);
+      if (obj.id) return String(obj.id).trim();
+    } catch(e) {
+      const m = s.match(/"id"\s*:\s*"?([A-Za-z0-9]+)"?/);
+      if (m) return m[1];
+    }
+  }
+  return s;
+}
+
+// ── VALIDAÇÃO POR MARKETPLACE ─────────────────────────
+function validateCode(code) {
+  // Shopee: rejeita códigos ASN (INBRFSP...)
+  if (selectedMkt === 'Shopee') {
+    if (/^INBRFSP/i.test(code)) {
+      return { valid: false, msg: '⛔ Código inválido — ASN não deve ser bipado' };
+    }
+  }
+  return { valid: true };
+}
+
 // ── PACKAGES ───────────────────────────────────────────
 let lastAdded = { code: '', time: 0 };
-function addPackage(code) {
+function addPackage(rawCode) {
+  const code = cleanCode(rawCode);
   const now = Date.now();
   if (code === lastAdded.code && now - lastAdded.time < 2500) return;
   lastAdded = { code, time: now };
+
+  // Validação
+  const check = validateCode(code);
+  if (!check.valid) {
+    setScanStatus('duplicate', check.msg);
+    if (navigator.vibrate) navigator.vibrate([100,50,100]);
+    toast(check.msg);
+    return;
+  }
 
   if (packages.find(p => p.code === code)) {
     setScanStatus('duplicate', '⚠️ Já registrado: …' + code.slice(-14));
