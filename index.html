@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Expedição — Empório CTZ</title>
+  <!-- QR Code + Barcode scanner (Code 128, EAN, QR, etc.) -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <!-- PDF generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <style>
+    /* ── LOGO PLACEHOLDER ───── Substitua LOGO_URL no <script> pelo link do seu logo ── */
+    :root { --brand: #1a1a2e; --brand2: #2d2d5e; --accent: #e8b84b; }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; color: #1a1a2e; }
+
+    /* ── MODAL FUNCIONÁRIO ── */
+    #modalOverlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+      z-index: 999; display: flex; align-items: center; justify-content: center; padding: 24px;
+    }
+    .modal-card {
+      background: white; border-radius: 20px; padding: 28px; width: 100%; max-width: 380px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    .modal-logo { text-align: center; margin-bottom: 20px; }
+    .modal-logo .logo-placeholder {
+      display: inline-flex; align-items: center; justify-content: center;
+      background: var(--brand); color: var(--accent);
+      font-size: 13px; font-weight: 900; letter-spacing: 1px;
+      padding: 10px 20px; border-radius: 10px; gap: 8px;
+    }
+    .modal-logo img.real-logo { max-height: 64px; max-width: 200px; object-fit: contain; }
+    .modal-card h2 { font-size: 18px; font-weight: 800; margin-bottom: 6px; }
+    .modal-card p { font-size: 13px; color: #888; margin-bottom: 20px; }
+    .modal-card input {
+      width: 100%; padding: 14px; border: 2px solid #e0e0e0; border-radius: 12px;
+      font-size: 16px; outline: none; margin-bottom: 14px; transition: border-color 0.2s;
+    }
+    .modal-card input:focus { border-color: var(--brand); }
+    .modal-card button {
+      width: 100%; padding: 14px; background: var(--brand); color: white;
+      border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer;
+    }
+
+    /* ── HEADER ── */
+    header {
+      background: linear-gradient(135deg, var(--brand), var(--brand2));
+      color: white; padding: 12px 16px;
+      display: flex; align-items: center; gap: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .header-logo {
+      height: 40px; width: 40px; border-radius: 8px; object-fit: contain;
+      background: white; padding: 4px; flex-shrink: 0;
+    }
+    .header-logo-text {
+      height: 40px; display: flex; align-items: center; justify-content: center;
+      background: var(--accent); color: var(--brand);
+      font-size: 10px; font-weight: 900; letter-spacing: 0.5px;
+      padding: 0 8px; border-radius: 8px; flex-shrink: 0; text-align: center; line-height: 1.2;
+    }
+    header .hinfo h1 { font-size: 16px; font-weight: 800; }
+    header .hinfo small { font-size: 11px; opacity: 0.75; }
+    header .hfunc {
+      margin-left: auto; text-align: right; font-size: 11px; opacity: 0.85;
+    }
+    header .hfunc strong { display: block; font-size: 13px; }
+
+    /* ── TABS ── */
+    .tab-bar {
+      display: flex; background: white; border-bottom: 2px solid #f0f2f5;
+      position: sticky; top: 62px; z-index: 99;
+    }
+    .tab-bar button {
+      flex: 1; padding: 11px 4px; border: none; background: none;
+      font-size: 12px; font-weight: 600; color: #888; cursor: pointer;
+      border-bottom: 3px solid transparent; transition: all 0.2s;
+    }
+    .tab-bar button.active { color: var(--brand); border-bottom-color: var(--brand); }
+
+    .page { display: none; padding: 14px; }
+    .page.active { display: block; }
+
+    /* ── MARKETPLACE CHIPS ── */
+    .mkt-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+      max-width: 420px; margin: 0 auto 14px;
+    }
+    .mkt-btn {
+      padding: 10px 6px; border: 2px solid #e0e0e0; border-radius: 10px;
+      background: white; font-size: 11px; font-weight: 700; color: #555;
+      cursor: pointer; text-align: center; transition: all 0.15s;
+    }
+    .mkt-btn .mi { display: block; font-size: 20px; margin-bottom: 3px; }
+    .mkt-btn.selected { border-color: var(--brand); background: var(--brand); color: white; }
+
+    /* ── SCANNER ── */
+    #reader {
+      max-width: 420px; margin: 0 auto 12px; border-radius: 16px; overflow: hidden;
+      background: #000;
+    }
+    #reader img, #reader video { border-radius: 16px; }
+    /* hide html5-qrcode default UI clutter */
+    #reader__dashboard { display: none !important; }
+    #reader__header_message { display: none !important; }
+    #reader__status_span { display: none !important; }
+
+    .scan-status {
+      text-align: center; padding: 12px; font-size: 14px; font-weight: 600;
+      border-radius: 12px; margin-bottom: 12px; max-width: 420px; margin-left: auto; margin-right: auto;
+    }
+    .scan-status.waiting { background: #e8eaf6; color: var(--brand); }
+    .scan-status.success { background: #e8f5e9; color: #2e7d32; }
+    .scan-status.duplicate { background: #fff8e1; color: #f57f17; }
+
+    .btn {
+      display: block; width: 100%; max-width: 420px; margin: 0 auto 10px;
+      padding: 14px; border: none; border-radius: 12px;
+      font-size: 15px; font-weight: 700; cursor: pointer;
+      transition: transform 0.1s, opacity 0.2s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary { background: var(--brand); color: white; }
+    .btn-secondary { background: white; color: var(--brand); border: 2px solid var(--brand); }
+    .btn-danger { background: white; color: #d32f2f; border: 2px solid #d32f2f; }
+    .btn-email { background: #1565c0; color: white; }
+    .btn-whatsapp { background: #25D366; color: white; }
+    .btn-pdf { background: #c62828; color: white; }
+
+    /* ── STATS ── */
+    .summary-card {
+      background: white; border-radius: 16px; padding: 14px; margin-bottom: 14px;
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .stat { text-align: center; }
+    .stat .num { font-size: 22px; font-weight: 800; color: var(--brand); }
+    .stat .label { font-size: 10px; color: #888; margin-top: 2px; }
+
+    /* ── FILTER BAR ── */
+    .filter-bar {
+      display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 12px;
+      scrollbar-width: none;
+    }
+    .filter-bar::-webkit-scrollbar { display: none; }
+    .filter-chip {
+      white-space: nowrap; padding: 6px 14px; border-radius: 20px;
+      border: 1.5px solid #ddd; background: white;
+      font-size: 12px; font-weight: 600; color: #888; cursor: pointer; transition: all 0.15s;
+    }
+    .filter-chip.active { background: var(--brand); color: white; border-color: var(--brand); }
+
+    /* ── PACKAGE LIST ── */
+    .package-list { display: flex; flex-direction: column; gap: 8px; }
+    .pkg-item {
+      background: white; border-radius: 12px; padding: 12px 14px;
+      display: flex; align-items: center; gap: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      animation: slideIn 0.25s ease;
+    }
+    @keyframes slideIn { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+    .pkg-badge {
+      font-size: 10px; font-weight: 800; padding: 3px 7px; border-radius: 6px;
+      text-transform: uppercase; white-space: nowrap; flex-shrink: 0;
+    }
+    .pkg-info { flex: 1; min-width: 0; }
+    .pkg-code { font-size: 12px; font-weight: 700; word-break: break-all; }
+    .pkg-meta { font-size: 11px; color: #aaa; margin-top: 2px; }
+    .pkg-del { background: none; border: none; font-size: 18px; color: #ddd; cursor: pointer; padding: 4px; flex-shrink: 0; }
+    .pkg-del:active { color: #d32f2f; }
+
+    .empty-state { text-align: center; padding: 48px 24px; color: #bbb; }
+    .empty-state .icon { font-size: 56px; margin-bottom: 12px; }
+
+    /* ── FORM CARDS ── */
+    .form-card {
+      background: white; border-radius: 16px; padding: 18px; margin-bottom: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .form-card label { display: block; font-size: 12px; font-weight: 700; color: #555; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .form-card input {
+      width: 100%; padding: 12px 14px; border: 2px solid #e0e0e0; border-radius: 10px;
+      font-size: 15px; outline: none; transition: border-color 0.2s; background: white;
+    }
+    .form-card input:focus { border-color: var(--brand); }
+
+    #signatureCanvas {
+      width: 100%; height: 160px; border: 2px dashed #ddd; border-radius: 10px;
+      background: #fafafa; cursor: crosshair; display: block; touch-action: none;
+    }
+    #signatureCanvas.signed { border-color: var(--brand); border-style: solid; background: white; }
+    .sig-hint { font-size: 12px; color: #aaa; text-align: center; margin-top: 6px; }
+
+    /* ── ACTION BUTTONS GROUP ── */
+    .action-group { margin-top: 16px; }
+    .action-group .btn { margin-bottom: 10px; }
+
+    /* ── TOAST ── */
+    #toast {
+      position: fixed; bottom: 24px; left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--brand); color: white;
+      padding: 12px 24px; border-radius: 24px; font-size: 14px; font-weight: 600;
+      z-index: 9999; transition: transform 0.3s ease; white-space: nowrap; pointer-events: none;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* ── PRINT STYLES ── */
+    @media print {
+      body > *:not(#printArea) { display: none !important; }
+      #printArea { display: block !important; }
+    }
+    #printArea { display: none; }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════ MODAL FUNCIONÁRIO ═══════════════════ -->
+<div id="modalOverlay">
+  <div class="modal-card">
+    <div class="modal-logo" id="modalLogoArea">
+      <!-- Logo real será inserida pelo JS se LOGO_URL estiver preenchida -->
+      <div class="logo-placeholder">📦 EMPÓRIO CTZ</div>
+    </div>
+    <h2>Olá! Quem está fazendo a bipagem?</h2>
+    <p>Seu nome será registrado no comprovante de coleta.</p>
+    <input type="text" id="inputFuncionario" placeholder="Seu nome completo" autocomplete="name" />
+    <button onclick="confirmarFuncionario()">Entrar →</button>
+  </div>
+</div>
+
+<!-- ═══════════════════ HEADER ═══════════════════ -->
+<header>
+  <div id="headerLogoArea">
+    <div class="header-logo-text">EMPÓRIO<br>CTZ</div>
+  </div>
+  <div class="hinfo">
+    <h1>Expedição</h1>
+    <small id="headerDate"></small>
+  </div>
+  <div class="hfunc">
+    <span style="opacity:0.7;font-size:10px">Funcionário</span>
+    <strong id="headerFunc">—</strong>
+  </div>
+</header>
+
+<div class="tab-bar">
+  <button class="active" onclick="showPage('scanner',this)">📷 Scanner</button>
+  <button onclick="showPage('lista',this)">📋 Lista</button>
+  <button onclick="showPage('assinar',this)">✍️ Assinar</button>
+</div>
+
+<!-- ═══════════════════ SCANNER ═══════════════════ -->
+<div id="page-scanner" class="page active">
+
+  <div class="mkt-grid">
+    <button class="mkt-btn selected" data-mkt="Shopee" onclick="selectMkt(this)"><span class="mi">🛍️</span>Shopee</button>
+    <button class="mkt-btn" data-mkt="Mercado Livre" onclick="selectMkt(this)"><span class="mi">🟡</span>Mercado Livre</button>
+    <button class="mkt-btn" data-mkt="Amazon" onclick="selectMkt(this)"><span class="mi">📦</span>Amazon</button>
+    <button class="mkt-btn" data-mkt="Magalu" onclick="selectMkt(this)"><span class="mi">🔵</span>Magalu</button>
+    <button class="mkt-btn" data-mkt="Devolução" onclick="selectMkt(this)"><span class="mi">↩️</span>Devolução</button>
+    <button class="mkt-btn" data-mkt="Outros" onclick="selectMkt(this)"><span class="mi">🏪</span>Outros</button>
+  </div>
+
+  <div id="reader"></div>
+  <div id="scanStatus" class="scan-status waiting">📷 Selecione o marketplace e inicie o scanner</div>
+  <button class="btn btn-primary" id="btnCamera" onclick="toggleScanner()">▶️ Iniciar Scanner</button>
+  <button class="btn btn-secondary" onclick="manualEntry()">⌨️ Digitar código manualmente</button>
+</div>
+
+<!-- ═══════════════════ LISTA ═══════════════════ -->
+<div id="page-lista" class="page">
+  <div class="summary-card">
+    <div class="stat"><div class="num" id="totalCount">0</div><div class="label">Total</div></div>
+    <div class="stat"><div class="num" id="devCount">0</div><div class="label">Devol.</div></div>
+    <div class="stat"><div class="num" id="mktCount">0</div><div class="label">Marketplaces</div></div>
+    <div class="stat"><div class="num" id="sessionTime">00:00</div><div class="label">Sessão</div></div>
+  </div>
+
+  <div class="filter-bar">
+    <button class="filter-chip active" data-filter="Todos" onclick="applyFilter(this)">Todos</button>
+    <button class="filter-chip" data-filter="Shopee" onclick="applyFilter(this)">🛍️ Shopee</button>
+    <button class="filter-chip" data-filter="Mercado Livre" onclick="applyFilter(this)">🟡 Mercado Livre</button>
+    <button class="filter-chip" data-filter="Amazon" onclick="applyFilter(this)">📦 Amazon</button>
+    <button class="filter-chip" data-filter="Magalu" onclick="applyFilter(this)">🔵 Magalu</button>
+    <button class="filter-chip" data-filter="Devolução" onclick="applyFilter(this)">↩️ Devolução</button>
+    <button class="filter-chip" data-filter="Outros" onclick="applyFilter(this)">🏪 Outros</button>
+  </div>
+
+  <div id="packageList" class="package-list"></div>
+  <div id="emptyState" class="empty-state">
+    <div class="icon">📭</div>
+    <p>Nenhum pacote lido ainda.<br>Vá para a aba Scanner!</p>
+  </div>
+  <button class="btn btn-danger" onclick="clearAll()" id="btnClear" style="display:none;margin-top:14px">🗑️ Limpar Tudo</button>
+</div>
+
+<!-- ═══════════════════ ASSINAR ═══════════════════ -->
+<div id="page-assinar" class="page">
+  <div class="form-card">
+    <label>Nome do Motorista</label>
+    <input type="text" id="driverName" placeholder="Ex: João Silva" />
+  </div>
+  <div class="form-card">
+    <label>Transportadora</label>
+    <input type="text" id="driverTransp" placeholder="Ex: Shopee Logistics" />
+  </div>
+  <div class="form-card">
+    <label>Placa do Veículo</label>
+    <input type="text" id="driverPlate" placeholder="Ex: ABC-1234" style="text-transform:uppercase" />
+  </div>
+  <div class="form-card">
+    <label>Assinatura do Motorista</label>
+    <canvas id="signatureCanvas"></canvas>
+    <div class="sig-hint">Assine com o dedo na área acima</div>
+    <button class="btn btn-secondary" onclick="clearSignature()" style="max-width:180px;padding:8px;font-size:13px;margin-top:10px">↺ Apagar Assinatura</button>
+  </div>
+
+  <div class="action-group">
+    <button class="btn btn-pdf" onclick="gerarPDF()">📄 Gerar e Baixar PDF</button>
+    <button class="btn btn-email" onclick="enviarEmail()">✉️ Enviar por Email</button>
+    <button class="btn btn-whatsapp" onclick="enviarWhatsApp()">💬 Enviar pelo WhatsApp</button>
+    <button class="btn btn-danger" onclick="novaColeta()" style="margin-top:4px">🔄 Nova Coleta</button>
+  </div>
+</div>
+
+<!-- ═══════════════════ PRINT AREA ═══════════════════ -->
+<div id="printArea"></div>
+
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════
+// CONFIGURAÇÃO — Substitua pela URL do logo da empresa
+// Ex: const LOGO_URL = 'https://seusite.com/logo.png';
+const LOGO_URL = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMDAgMjMwIiB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIzMCI+CiAgPCEtLSBiYWcgYm9keSAtLT4KICA8cmVjdCB4PSI0MCIgeT0iNzAiIHdpZHRoPSIxMjAiIGhlaWdodD0iMTAwIiByeD0iMTIiIGZpbGw9IiNmNWE2MjMiIHN0cm9rZT0iIzMzMyIgc3Ryb2tlLXdpZHRoPSIzIi8+CiAgPCEtLSBiYWcgaGFuZGxlIC0tPgogIDxwYXRoIGQ9Ik03NSw3MCBRMTAwLDMwIDEyNSw3MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZjVhNjIzIiBzdHJva2Utd2lkdGg9IjE0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNNzUsNzAgUTEwMCwzMCAxMjUsNzAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzMzMyIgc3Ryb2tlLXdpZHRoPSIxOCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTc1LDcwIFExMDAsMzAgMTI1LDcwIiBmaWxsPSJub25lIiBzdHJva2U9IiNmNWE2MjMiIHN0cm9rZS13aWR0aD0iMTIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDwhLS0gaGFuZCBjdXJzb3IgLS0+CiAgPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNjAsNjApIHNjYWxlKDAuOSkiPgogICAgPHBhdGggZD0iTTQwLDEzMCBMNDAsNjAgUTQwLDUwIDUwLDUwIFE2MCw1MCA2MCw2MCBMNjAsOTAgUTY1LDg1IDc1LDg3IFE4NSw4OSA4NSwxMDAgTDg1LDEzMCBRODUsMTYwIDU1LDE2MCBRMjUsMTYwIDI1LDEzMCBaIiBmaWxsPSIjMWExYTFhIiBzdHJva2U9IiM1NTUiIHN0cm9rZS13aWR0aD0iMiIvPgogICAgPHJlY3QgeD0iMzgiIHk9IjQwIiB3aWR0aD0iMjIiIGhlaWdodD0iNjAiIHJ4PSIxMSIgZmlsbD0iIzFhMWExYSIgc3Ryb2tlPSIjNTU1IiBzdHJva2Utd2lkdGg9IjIiLz4KICA8L2c+CiAgPCEtLSBFTVDDk1JJTyB0ZXh0IC0tPgogIDx0ZXh0IHg9IjEwMCIgeT0iMTc1IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0iQXJpYWwgQmxhY2ssIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTgiIGZvbnQtd2VpZ2h0PSI5MDAiIGZpbGw9IiNmNWE2MjMiPkVNUMOTUklPPC90ZXh0PgogIDwhLS0gQ1RaIHRleHQgLS0+CiAgPHRleHQgeD0iMTAwIiB5PSIyMTgiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSJBcmlhbCBCbGFjaywgc2Fucy1zZXJpZiIgZm9udC1zaXplPSI1MiIgZm9udC13ZWlnaHQ9IjkwMCIgZmlsbD0iIzg4OCIgc3Ryb2tlPSIjMWExYTFhIiBzdHJva2Utd2lkdGg9IjMiIHBhaW50LW9yZGVyPSJzdHJva2UiPkNUWjwvdGV4dD4KPC9zdmc+Cg=='; // deixe vazio para usar texto
+const EMAIL_DESTINO = 'atendimento@emporioctz.com.br';
+// ══════════════════════════════════════════════════════
+
+const MKT_COLORS = {
+  'Shopee':        { bg: '#fff0eb', color: '#ee4d2d' },
+  'Mercado Livre': { bg: '#fff9e0', color: '#c49800' },
+  'Amazon':        { bg: '#e8f4fd', color: '#0066c0' },
+  'Magalu':        { bg: '#e8eaf6', color: '#1565c0' },
+  'Devolução':     { bg: '#fce4ec', color: '#c62828' },
+  'Outros':        { bg: '#f3e5f5', color: '#6a1b9a' },
+};
+
+// ── STATE ──────────────────────────────────────────────
+let packages = JSON.parse(localStorage.getItem('pkgs_ctz2') || '[]');
+let funcionario = localStorage.getItem('func_ctz') || '';
+let selectedMkt = 'Shopee';
+let currentFilter = 'Todos';
+let sessionStart = Date.now();
+let scannerActive = false;
+let html5QrCode = null;
+let sigDrawing = false;
+let sigHasContent = false;
+
+// ── LOGO ───────────────────────────────────────────────
+if (LOGO_URL) {
+  ['modalLogoArea', 'headerLogoArea'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (id === 'modalLogoArea') {
+      el.innerHTML = `<img src="${LOGO_URL}" class="real-logo" alt="Logo Empório CTZ" onerror="this.style.display='none'" />`;
+    } else {
+      el.innerHTML = `<img src="${LOGO_URL}" class="header-logo" alt="Logo" onerror="this.parentNode.innerHTML='<div class=header-logo-text>EMPÓRIO<br>CTZ</div>'" />`;
+    }
+  });
+}
+
+// ── INIT ───────────────────────────────────────────────
+document.getElementById('headerDate').textContent =
+  new Date().toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
+
+if (funcionario) {
+  document.getElementById('modalOverlay').style.display = 'none';
+  document.getElementById('headerFunc').textContent = funcionario;
+}
+
+renderList();
+setupSignature();
+setInterval(updateTimer, 1000);
+
+// ── FUNCIONÁRIO ────────────────────────────────────────
+document.getElementById('inputFuncionario').addEventListener('keydown', e => {
+  if (e.key === 'Enter') confirmarFuncionario();
+});
+function confirmarFuncionario() {
+  const nome = document.getElementById('inputFuncionario').value.trim();
+  if (!nome) { toast('⚠️ Digite seu nome para continuar'); return; }
+  funcionario = nome;
+  localStorage.setItem('func_ctz', nome);
+  document.getElementById('modalOverlay').style.display = 'none';
+  document.getElementById('headerFunc').textContent = nome;
+  toast('👋 Olá, ' + nome + '!');
+}
+
+// ── TABS ───────────────────────────────────────────────
+function showPage(name, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-bar button').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (name !== 'scanner' && scannerActive) stopScanner();
+}
+
+// ── MARKETPLACE ────────────────────────────────────────
+function selectMkt(btn) {
+  document.querySelectorAll('.mkt-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedMkt = btn.dataset.mkt;
+}
+
+// ── SCANNER ────────────────────────────────────────────
+async function toggleScanner() {
+  if (scannerActive) { await stopScanner(); return; }
+  try {
+    html5QrCode = new Html5Qrcode('reader');
+    await html5QrCode.start(
+      { facingMode: 'environment' },
+      {
+        fps: 10,
+        qrbox: { width: 260, height: 260 },
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.ITF,
+          Html5QrcodeSupportedFormats.DATA_MATRIX,
+        ]
+      },
+      (decodedText) => addPackage(decodedText),
+      () => {} // ignore scan errors
+    );
+    scannerActive = true;
+    document.getElementById('btnCamera').textContent = '⏹️ Parar Scanner';
+    setScanStatus('waiting', '📷 Aponte para o QR Code ou código de barras');
+  } catch(e) {
+    toast('❌ Não foi possível acessar a câmera');
+    console.error(e);
+  }
+}
+
+async function stopScanner() {
+  if (html5QrCode && scannerActive) {
+    try { await html5QrCode.stop(); } catch(e) {}
+    html5QrCode = null;
+  }
+  scannerActive = false;
+  document.getElementById('btnCamera').textContent = '▶️ Iniciar Scanner';
+  document.getElementById('reader').innerHTML = '';
+}
+
+function setScanStatus(type, msg) {
+  const el = document.getElementById('scanStatus');
+  el.className = 'scan-status ' + type;
+  el.textContent = msg;
+}
+
+function manualEntry() {
+  const code = prompt('Digite o código do pacote:');
+  if (code && code.trim()) addPackage(code.trim());
+}
+
+// ── PACKAGES ───────────────────────────────────────────
+let lastAdded = { code: '', time: 0 };
+function addPackage(code) {
+  const now = Date.now();
+  if (code === lastAdded.code && now - lastAdded.time < 2500) return;
+  lastAdded = { code, time: now };
+
+  if (packages.find(p => p.code === code)) {
+    setScanStatus('duplicate', '⚠️ Já registrado: …' + code.slice(-14));
+    toast('⚠️ Pacote já lido!');
+    return;
+  }
+  packages.unshift({
+    code,
+    mkt: selectedMkt,
+    time: new Date().toLocaleTimeString('pt-BR'),
+    func: funcionario
+  });
+  save();
+  renderList();
+  setScanStatus('success', '✅ ' + selectedMkt + ' — …' + code.slice(-14));
+  if (navigator.vibrate) navigator.vibrate(80);
+  toast('✅ Pacote #' + packages.length + ' — ' + selectedMkt);
+  setTimeout(() => {
+    const el = document.getElementById('scanStatus');
+    if (el.classList.contains('success')) setScanStatus('waiting', '📷 Próximo pacote...');
+  }, 2000);
+}
+
+function removePackage(code) {
+  if (!confirm('Remover este pacote?')) return;
+  packages = packages.filter(p => p.code !== code);
+  save();
+  renderList();
+  toast('🗑️ Removido');
+}
+
+function clearAll() {
+  if (!confirm('Apagar TODOS os ' + packages.length + ' pacotes?')) return;
+  packages = [];
+  save();
+  renderList();
+  sessionStart = Date.now();
+  toast('🗑️ Lista limpa');
+}
+
+function save() { localStorage.setItem('pkgs_ctz2', JSON.stringify(packages)); }
+
+// ── FILTER & RENDER ────────────────────────────────────
+function applyFilter(chip) {
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  chip.classList.add('active');
+  currentFilter = chip.dataset.filter;
+  renderList();
+}
+
+function renderList() {
+  const list = document.getElementById('packageList');
+  const empty = document.getElementById('emptyState');
+  const btnClear = document.getElementById('btnClear');
+
+  document.getElementById('totalCount').textContent = packages.length;
+  document.getElementById('devCount').textContent = packages.filter(p => p.mkt === 'Devolução').length;
+  const mkts = new Set(packages.map(p => p.mkt));
+  document.getElementById('mktCount').textContent = mkts.size;
+  document.querySelectorAll('.tab-bar button')[1].textContent =
+    packages.length ? `📋 Lista (${packages.length})` : '📋 Lista';
+
+  const filtered = currentFilter === 'Todos' ? packages : packages.filter(p => p.mkt === currentFilter);
+
+  if (!packages.length) {
+    list.innerHTML = '';
+    empty.style.display = 'block';
+    btnClear.style.display = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+  btnClear.style.display = 'block';
+
+  list.innerHTML = filtered.map(p => {
+    const c = MKT_COLORS[p.mkt] || MKT_COLORS['Outros'];
+    const safeCode = p.code.replace(/'/g, "\\'");
+    return `<div class="pkg-item">
+      <span class="pkg-badge" style="background:${c.bg};color:${c.color}">${p.mkt}</span>
+      <div class="pkg-info">
+        <div class="pkg-code">${p.code}</div>
+        <div class="pkg-meta">${p.time} · ${p.func || '—'}</div>
+      </div>
+      <button class="pkg-del" onclick="removePackage('${safeCode}')">✕</button>
+    </div>`;
+  }).join('');
+}
+
+// ── TIMER ──────────────────────────────────────────────
+function updateTimer() {
+  const s = Math.floor((Date.now() - sessionStart) / 1000);
+  document.getElementById('sessionTime').textContent =
+    String(Math.floor(s / 60)).padStart(2,'0') + ':' + String(s % 60).padStart(2,'0');
+}
+
+// ── SIGNATURE ──────────────────────────────────────────
+function setupSignature() {
+  const canvas = document.getElementById('signatureCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.strokeStyle = '#1a1a2e'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  function pos(e) {
+    const r = canvas.getBoundingClientRect(), s = e.touches ? e.touches[0] : e;
+    return { x: (s.clientX - r.left) * (canvas.width / r.width), y: (s.clientY - r.top) * (canvas.height / r.height) };
+  }
+  canvas.addEventListener('mousedown', e => { sigDrawing=true; const p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); });
+  canvas.addEventListener('mousemove', e => { if(!sigDrawing) return; const p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); markSig(); });
+  canvas.addEventListener('mouseup', () => sigDrawing=false);
+  canvas.addEventListener('touchstart', e => { e.preventDefault(); sigDrawing=true; const p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); }, {passive:false});
+  canvas.addEventListener('touchmove', e => { if(!sigDrawing) return; e.preventDefault(); const p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); markSig(); }, {passive:false});
+  canvas.addEventListener('touchend', () => sigDrawing=false);
+}
+function markSig() { sigHasContent=true; document.getElementById('signatureCanvas').classList.add('signed'); }
+function clearSignature() {
+  const c = document.getElementById('signatureCanvas');
+  c.getContext('2d').clearRect(0,0,c.width,c.height);
+  sigHasContent=false; c.classList.remove('signed');
+}
+
+// ── VALIDAÇÃO ──────────────────────────────────────────
+function validarColeta() {
+  if (!packages.length) { toast('⚠️ Nenhum pacote na lista!'); return false; }
+  if (!document.getElementById('driverName').value.trim()) { toast('⚠️ Informe o nome do motorista'); return false; }
+  if (!sigHasContent) { toast('⚠️ Motorista precisa assinar!'); return false; }
+  return true;
+}
+
+// ── DADOS DO COMPROVANTE ───────────────────────────────
+function dadosColeta() {
+  const now = new Date();
+  const byMkt = {};
+  packages.forEach(p => { byMkt[p.mkt] = (byMkt[p.mkt]||0)+1; });
+  return {
+    data: now.toLocaleDateString('pt-BR'),
+    hora: now.toLocaleTimeString('pt-BR'),
+    motorista: document.getElementById('driverName').value.trim(),
+    transportadora: document.getElementById('driverTransp').value.trim(),
+    placa: document.getElementById('driverPlate').value.trim().toUpperCase(),
+    funcionario,
+    total: packages.length,
+    byMkt,
+    pacotes: packages,
+    sigData: document.getElementById('signatureCanvas').toDataURL()
+  };
+}
+
+// ── GERAR PDF (via impressão) ──────────────────────────
+function gerarPDF() {
+  if (!validarColeta()) return;
+  const d = dadosColeta();
+
+  const byMktRows = Object.entries(d.byMkt)
+    .map(([m,n]) => `<tr><td>${m}</td><td><b>${n}</b></td></tr>`).join('');
+
+  const pkgRows = d.pacotes.map((p,i) =>
+    `<tr>
+      <td>${String(i+1).padStart(3,'0')}</td>
+      <td>${p.mkt}</td>
+      <td class="mono">${p.code}</td>
+      <td>${p.time}</td>
+      <td>${p.func||'—'}</td>
+    </tr>`
+  ).join('');
+
+  const logoHtml = LOGO_URL
+    ? `<img src="${LOGO_URL}" style="height:60px;object-fit:contain" alt="Logo" />`
+    : `<div style="background:#1a1a2e;color:#e8b84b;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:900;letter-spacing:1px;display:inline-block">📦 EMPÓRIO CTZ</div>`;
+
+  const html = `<!DOCTYPE html><html lang="pt-BR"><head>
+  <meta charset="UTF-8">
+  <title>Comprovante de Coleta — Empório CTZ</title>
+  <style>
+    @page { margin: 20mm 15mm; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #1a1a2e; margin: 0; }
+    .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #1a1a2e; padding-bottom: 14px; margin-bottom: 16px; }
+    .header-right { text-align: right; font-size: 11px; color: #555; }
+    .header-right .title { font-size: 18px; font-weight: 900; color: #1a1a2e; display: block; }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+    .info-box { background: #f5f5f5; padding: 10px 14px; border-radius: 8px; }
+    .info-box .lbl { font-size: 10px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+    .info-box .val { font-size: 14px; font-weight: 700; margin-top: 2px; }
+    h3 { font-size: 12px; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: 0.5px; margin: 14px 0 8px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    th { background: #1a1a2e; color: white; padding: 6px 8px; text-align: left; }
+    td { padding: 5px 8px; border-bottom: 1px solid #eee; }
+    tr:nth-child(even) td { background: #fafafa; }
+    .mono { font-family: monospace; font-size: 10px; word-break: break-all; }
+    .sig-section { margin-top: 20px; padding: 14px; border: 1.5px solid #ddd; border-radius: 10px; text-align: center; }
+    .sig-section p { font-size: 12px; color: #555; margin-bottom: 10px; }
+    .sig-section img { max-width: 340px; height: 120px; object-fit: contain; border-bottom: 1.5px solid #333; display: block; margin: 0 auto 6px; }
+    .sig-section .sig-name { font-weight: 700; font-size: 13px; }
+    .footer { margin-top: 18px; border-top: 1px solid #eee; padding-top: 8px; font-size: 10px; color: #aaa; text-align: center; }
+  </style>
+  </head><body>
+  <div class="header">
+    <div>${logoHtml}</div>
+    <div class="header-right">
+      <span class="title">Comprovante de Coleta</span>
+      ${d.data} às ${d.hora}
+    </div>
+  </div>
+
+  <div class="info-grid">
+    <div class="info-box"><div class="lbl">Motorista</div><div class="val">${d.motorista}</div></div>
+    <div class="info-box"><div class="lbl">Placa do Veículo</div><div class="val">${d.placa || '—'}</div></div>
+    <div class="info-box"><div class="lbl">Transportadora</div><div class="val">${d.transportadora || '—'}</div></div>
+    <div class="info-box"><div class="lbl">Funcionário (bipagem)</div><div class="val">${d.funcionario || '—'}</div></div>
+    <div class="info-box" style="grid-column:span 2"><div class="lbl">Total de Pacotes</div><div class="val" style="font-size:22px;color:#1a1a2e">${d.total} pacote(s)</div></div>
+  </div>
+
+  <h3>Resumo por Marketplace</h3>
+  <table>
+    <thead><tr><th>Marketplace</th><th>Quantidade</th></tr></thead>
+    <tbody>${byMktRows}</tbody>
+  </table>
+
+  <h3>Lista Completa de Pacotes</h3>
+  <table>
+    <thead><tr><th>#</th><th>Marketplace</th><th>Código do Pacote</th><th>Hora</th><th>Funcionário</th></tr></thead>
+    <tbody>${pkgRows}</tbody>
+  </table>
+
+  <div class="sig-section">
+    <p>Declaro que recebi os <b>${d.total}</b> pacote(s) listados acima em perfeitas condições.</p>
+    <img src="${d.sigData}" alt="Assinatura" />
+    <div class="sig-name">${d.motorista}</div>
+    <div style="font-size:11px;color:#888;margin-top:2px">${d.placa ? d.placa + ' · ' : ''}${d.transportadora || ''}</div>
+  </div>
+
+  <div class="footer">Gerado por Expedição Empório CTZ · ${d.data} às ${d.hora} · Funcionário: ${d.funcionario}</div>
+  </body></html>`;
+
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.onload = () => {
+    printWindow.focus();
+    printWindow.print();
+  };
+  toast('📄 PDF aberto — use "Salvar como PDF" na impressão');
+}
+
+// ── EMAIL ──────────────────────────────────────────────
+function enviarEmail() {
+  if (!validarColeta()) return;
+  const d = dadosColeta();
+  const subject = encodeURIComponent(`Comprovante de Coleta — ${d.data} — ${d.total} pacotes`);
+  const byMktText = Object.entries(d.byMkt).map(([m,n]) => `  ${m}: ${n}`).join('\n');
+  const body = encodeURIComponent(
+`Comprovante de Coleta — Empório CTZ
+=====================================
+Data/Hora: ${d.data} às ${d.hora}
+Motorista: ${d.motorista}
+Transportadora: ${d.transportadora || '—'}
+Placa: ${d.placa || '—'}
+Funcionário (bipagem): ${d.funcionario}
+Total de Pacotes: ${d.total}
+
+Resumo por Marketplace:
+${byMktText}
+
+Lista de Pacotes:
+${d.pacotes.map((p,i) => `${String(i+1).padStart(3,'0')}. [${p.mkt}] ${p.code} — ${p.time}`).join('\n')}
+
+Comprovante gerado automaticamente pelo sistema de Expedição Empório CTZ.`
+  );
+  window.open(`mailto:${EMAIL_DESTINO}?subject=${subject}&body=${body}`);
+  toast('✉️ Email aberto — anexe o PDF salvo');
+}
+
+// ── WHATSAPP ───────────────────────────────────────────
+function enviarWhatsApp() {
+  if (!validarColeta()) return;
+  const d = dadosColeta();
+  const byMktText = Object.entries(d.byMkt).map(([m,n]) => `  ${m}: ${n}`).join('\n');
+  const text = encodeURIComponent(
+`📦 *COMPROVANTE DE COLETA — EMPÓRIO CTZ*
+━━━━━━━━━━━━━━━━━━━━
+📅 ${d.data} às ${d.hora}
+🚗 Motorista: *${d.motorista}*
+🚛 Transportadora: ${d.transportadora || '—'}
+🔑 Placa: *${d.placa || '—'}*
+👤 Funcionário: ${d.funcionario}
+📦 Total: *${d.total} pacotes*
+
+*Por Marketplace:*
+${byMktText}
+
+_Empório CTZ — Sistema de Expedição_`
+  );
+  window.open(`https://wa.me/?text=${text}`, '_blank');
+  toast('💬 WhatsApp aberto!');
+}
+
+// ── NOVA COLETA ────────────────────────────────────────
+function novaColeta() {
+  if (!confirm('Iniciar nova coleta? Isso irá limpar a lista atual.')) return;
+  packages = [];
+  save();
+  renderList();
+  clearSignature();
+  document.getElementById('driverName').value = '';
+  document.getElementById('driverTransp').value = '';
+  document.getElementById('driverPlate').value = '';
+  sessionStart = Date.now();
+  toast('🆕 Nova coleta iniciada!');
+}
+
+// ── TOAST ──────────────────────────────────────────────
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+}
+</script>
+</body>
+</html>
