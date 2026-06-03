@@ -8,6 +8,7 @@
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <!-- PDF generation -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 
   <style>
     /* ── LOGO PLACEHOLDER ───── Substitua LOGO_URL no <script> pelo link do seu logo ── */
@@ -842,28 +843,140 @@ Comprovante gerado automaticamente pelo sistema de Expedição Empório CTZ.`
   toast('✉️ Email aberto — anexe o PDF salvo');
 }
 
-// ── WHATSAPP ───────────────────────────────────────────
-function enviarWhatsApp() {
-  if (!validarColeta()) return;
+// ── GERAR PDF COMO BLOB (jsPDF) ────────────────────────
+async function gerarPDFBlob() {
+  const { jsPDF } = window.jspdf;
   const d = dadosColeta();
-  const byMktText = Object.entries(d.byMkt).map(([m,n]) => `  ${m}: ${n}`).join('\n');
-  const text = encodeURIComponent(
-`📦 *COMPROVANTE DE COLETA — EMPÓRIO CTZ*
-━━━━━━━━━━━━━━━━━━━━
-📅 ${d.data} às ${d.hora}
-🚗 Motorista: *${d.motorista}*
-🚛 Transportadora: ${d.transportadora || '—'}
-🔑 Placa: *${d.placa || '—'}*
-👤 Funcionário: ${d.funcionario}
-📦 Total: *${d.total} pacotes*
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const pw = doc.internal.pageSize.getWidth();
+  const margin = 14;
+  let y = 16;
 
-*Por Marketplace:*
-${byMktText}
+  // ── Cabeçalho ──
+  doc.setFillColor(26, 26, 46);
+  doc.rect(0, 0, pw, 28, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text('Comprovante de Coleta', pw / 2, 12, { align: 'center' });
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Empório CTZ — Sistema de Expedição', pw / 2, 19, { align: 'center' });
+  doc.text(`${d.data} às ${d.hora}`, pw / 2, 25, { align: 'center' });
+  doc.setTextColor(0, 0, 0);
+  y = 36;
 
-_Empório CTZ — Sistema de Expedição_`
-  );
-  window.open(`https://wa.me/?text=${text}`, '_blank');
-  toast('💬 WhatsApp aberto!');
+  // ── Dados da coleta ──
+  doc.autoTable({
+    startY: y,
+    theme: 'grid',
+    headStyles: { fillColor: [26, 26, 46], textColor: 255, fontSize: 9 },
+    bodyStyles: { fontSize: 9 },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 55 } },
+    body: [
+      ['Motorista', d.motorista],
+      ['Transportadora', d.transportadora || '—'],
+      ['Placa do Veículo', d.placa || '—'],
+      ['Funcionário (bipagem)', d.funcionario],
+      ['Total de Pacotes', String(d.total) + ' pacote(s)'],
+    ],
+    margin: { left: margin, right: margin },
+  });
+  y = doc.lastAutoTable.finalY + 8;
+
+  // ── Resumo por marketplace ──
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text('Resumo por Marketplace', margin, y);
+  y += 4;
+  doc.autoTable({
+    startY: y,
+    theme: 'striped',
+    headStyles: { fillColor: [26, 26, 46], textColor: 255, fontSize: 9 },
+    bodyStyles: { fontSize: 9 },
+    head: [['Marketplace', 'Quantidade']],
+    body: Object.entries(d.byMkt).map(([m, n]) => [m, String(n)]),
+    margin: { left: margin, right: margin },
+  });
+  y = doc.lastAutoTable.finalY + 8;
+
+  // ── Lista de pacotes ──
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text('Lista Completa de Pacotes', margin, y);
+  y += 4;
+  doc.autoTable({
+    startY: y,
+    theme: 'striped',
+    headStyles: { fillColor: [26, 26, 46], textColor: 255, fontSize: 8 },
+    bodyStyles: { fontSize: 7.5 },
+    head: [['#', 'Marketplace', 'Código do Pacote', 'Hora', 'Funcionário']],
+    body: d.pacotes.map((p, i) => [
+      String(i + 1).padStart(3, '0'), p.mkt, p.code, p.time, p.func || '—'
+    ]),
+    margin: { left: margin, right: margin },
+    columnStyles: { 2: { font: 'courier', fontSize: 7 } },
+  });
+  y = doc.lastAutoTable.finalY + 10;
+
+  // ── Assinatura ──
+  if (y > 220) { doc.addPage(); y = 20; }
+  doc.setDrawColor(180);
+  doc.rect(margin, y, pw - margin * 2, 40);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('Assinatura do Motorista', pw / 2, y + 6, { align: 'center' });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text(`Declaro que recebi ${d.total} pacote(s) listados acima.`, pw / 2, y + 12, { align: 'center' });
+  // Embed signature image
+  try {
+    doc.addImage(d.sigData, 'JPEG', pw / 2 - 35, y + 14, 70, 18);
+  } catch(e) {}
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text(d.motorista, pw / 2, y + 36, { align: 'center' });
+
+  // ── Rodapé ──
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(150);
+  doc.text(`Gerado por Expedição Empório CTZ · ${d.data} às ${d.hora}`, pw / 2, 290, { align: 'center' });
+
+  return doc.output('blob');
+}
+
+// ── WHATSAPP (PDF via Web Share API) ──────────────────
+async function enviarWhatsApp() {
+  if (!validarColeta()) return;
+  toast('⏳ Gerando PDF...');
+  try {
+    const blob = await gerarPDFBlob();
+    const dataStr = dadosColeta().data.replace(/\//g, '-');
+    const filename = `Coleta-EmporioCTZ-${dataStr}.pdf`;
+    const file = new File([blob], filename, { type: 'application/pdf' });
+
+    // Tenta Web Share API (funciona no celular — Android e iOS)
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        files: [file],
+        title: 'Comprovante de Coleta — Empório CTZ',
+      });
+      toast('✅ PDF compartilhado!');
+    } else {
+      // Fallback: baixa o PDF e abre o WhatsApp Web
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      setTimeout(() => window.open('https://web.whatsapp.com', '_blank'), 800);
+      toast('📥 PDF baixado — anexe no WhatsApp que abriu');
+    }
+  } catch(e) {
+    if (e.name !== 'AbortError') toast('❌ Erro ao gerar PDF: ' + e.message);
+  }
 }
 
 // ── NOVA COLETA ────────────────────────────────────────
