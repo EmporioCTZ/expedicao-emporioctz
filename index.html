@@ -69,6 +69,11 @@
       margin-left: auto; text-align: right; font-size: 11px; opacity: 0.85;
     }
     header .hfunc strong { display: block; font-size: 13px; }
+    header .hfunc .trocar-btn {
+      display: inline-block; margin-top: 3px; font-size: 10px;
+      color: var(--accent); cursor: pointer; opacity: 0.9;
+      background: none; border: none; padding: 0; text-decoration: underline;
+    }
 
     /* ── TABS ── */
     .tab-bar {
@@ -245,6 +250,7 @@
   <div class="hfunc">
     <span style="opacity:0.7;font-size:10px">Funcionário</span>
     <strong id="headerFunc">—</strong>
+    <button class="trocar-btn" onclick="trocarFuncionario()">✏️ trocar</button>
   </div>
 </header>
 
@@ -399,6 +405,12 @@ function confirmarFuncionario() {
   document.getElementById('modalOverlay').style.display = 'none';
   document.getElementById('headerFunc').textContent = nome;
   toast('👋 Olá, ' + nome + '!');
+}
+
+function trocarFuncionario() {
+  document.getElementById('inputFuncionario').value = funcionario || '';
+  document.getElementById('modalOverlay').style.display = 'flex';
+  setTimeout(() => document.getElementById('inputFuncionario').focus(), 100);
 }
 
 // ── TABS ───────────────────────────────────────────────
