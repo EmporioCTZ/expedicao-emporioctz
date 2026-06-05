@@ -7,8 +7,8 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+
+
 <style>
 :root{--brand:#1a1a2e;--brand2:#2d2d5e;--accent:#e8b84b;--green:#2e7d32;--red:#c62828;}
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -504,25 +504,48 @@ const FIREBASE_CONFIG = {
 };
 // ═══════════════════════════════════════════════
 
-// FIREBASE INIT
+// FIREBASE — carrega apenas quando necessário (não bloqueia a página)
 let db = null;
 let firebaseOnline = false;
-try {
-  firebase.initializeApp(FIREBASE_CONFIG);
-  db = firebase.database();
-  db.ref('.info/connected').on('value', snap => {
-    firebaseOnline = snap.val() === true;
-    const badge = document.getElementById('dashFirebaseBadge');
-    if (badge) {
-      badge.textContent = firebaseOnline ? '🟢 Firebase conectado — dados em tempo real' : '🔴 Sem conexão com Firebase';
-      badge.className = 'firebase-badge' + (firebaseOnline ? ' online' : '');
-    }
-  });
-} catch(e) { console.warn('Firebase init failed:', e); }
+let _fbLoading = false;
+let _fbCbs = [];
+
+function ensureFirebase(cb) {
+  if (db) { cb(); return; }
+  _fbCbs.push(cb);
+  if (_fbLoading) return;
+  _fbLoading = true;
+  const s1 = document.createElement('script');
+  s1.src = 'https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js';
+  s1.onload = () => {
+    const s2 = document.createElement('script');
+    s2.src = 'https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js';
+    s2.onload = () => {
+      try {
+        firebase.initializeApp(FIREBASE_CONFIG);
+        db = firebase.database();
+        db.ref('.info/connected').on('value', snap => {
+          firebaseOnline = snap.val() === true;
+          const badge = document.getElementById('dashFirebaseBadge');
+          if (badge) {
+            badge.textContent = firebaseOnline ? '🟢 Firebase conectado' : '🔴 Sem conexão';
+            badge.className = 'firebase-badge' + (firebaseOnline ? ' online' : '');
+          }
+        });
+      } catch(e) { console.warn('Firebase error:', e); }
+      _fbCbs.forEach(fn => fn());
+      _fbCbs = [];
+    };
+    document.head.appendChild(s2);
+  };
+  document.head.appendChild(s1);
+}
 
 function fbSave(path, data) {
-  if (!db) return;
-  try { db.ref(path).push({...data, ts: Date.now()}); } catch(e) {}
+  ensureFirebase(() => {
+    if (!db) return;
+    try { db.ref(path).push({...data, ts: Date.now()}); } catch(e) {}
+  });
 }
 
 // LOGO
@@ -1115,7 +1138,12 @@ function dashFilter(chip){
   dashDays=parseInt(chip.dataset.days);dashLoad();
 }
 function dashLoad(){
-  if(!db){document.getElementById('dashEmpty').style.display='block';toast('⚠️ Firebase não conectado');return;}
+  ensureFirebase(() => {
+    if(!db){document.getElementById('dashEmpty').style.display='block';toast('⚠️ Firebase não conectado');return;}
+    dashLoadData();
+  });
+}
+function dashLoadData(){
   const since=Date.now()-(dashDays*24*60*60*1000);
   let allOps=[];
   let loaded=0;
