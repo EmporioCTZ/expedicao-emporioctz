@@ -848,7 +848,7 @@ function expNovaColeta(){
 let recSession={fornecedor:'',nfNumero:'',nfVolumes:0,caixas:[],started:false};
 let recKnown=JSON.parse(localStorage.getItem('rec_known')||'{}');
 let recVerification={};
-let recScanMode='barcode',recScannerActive=false,recQrCode=null;
+let recScanMode='barcode',recQrCode=null;
 let recLastBarcode='',recLastTime=0;
 let ncPendingBarcode='',ncRowCount=1;
 
