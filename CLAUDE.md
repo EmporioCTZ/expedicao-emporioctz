@@ -1,18 +1,24 @@
 # Expedição & Recebimento — Empório CTZ
 
 ## O que é este projeto
-Sistema web de gestão operacional para o Empório CTZ hospedado no GitHub Pages.
-- **URL ao vivo**: https://emporioctz.github.io/expedicao-emporioctz
-- **Repositório**: git@github.com:EmporioCTZ/expedicao-emporioctz.git
+Sistema web de gestão operacional para o Empório CTZ.
+- **URL ao vivo**: https://sistemas.emporioctz.com.br/expedicao/
+- **Servidor**: Contabo VPS — `root@sistemas.emporioctz.com.br`
+- **Arquivo no servidor**: `/var/www/ctz-sistemas/public/expedicao/index.html`
+- **Repositório GitHub** (backup): git@github.com:EmporioCTZ/expedicao-emporioctz.git
 - **Arquivo principal**: `index.html` (single-file, tudo em um arquivo)
 
-## Como fazer deploy
+## Como fazer deploy (SEMPRE assim)
 ```bash
-git add index.html
-git commit -m "descrição da mudança"
-GIT_SSH_COMMAND="ssh -i ~/.ssh/claude_ctz" git push origin main
+cd /Users/eduardocortez/Documents/projetos/expedicao-emporioctz
+
+# 1. Enviar para o servidor — entra em produção instantaneamente
+scp -i ~/.ssh/claude_ctz index.html root@sistemas.emporioctz.com.br:/var/www/ctz-sistemas/public/expedicao/index.html
+
+# 2. Commit no GitHub (backup)
+git add index.html && git commit -m "descrição" && git push origin main
 ```
-O GitHub Pages publica automaticamente em ~1-2 minutos após o push.
+A chave `~/.ssh/claude_ctz` já tem acesso ao servidor e ao GitHub.
 
 ## Stack
 - HTML/CSS/JS puro (sem framework, sem build step)
@@ -36,7 +42,7 @@ const FIREBASE_CONFIG = { ... };
 ## Regras críticas
 - **Firebase NUNCA no `<head>`** — bloqueia toda execução JS
 - Firebase usa lazy loading via `ensureFirebase(cb)`
-- `recScannerActive` declarado APENAS na linha ~593 (não declarar de novo)
+- `recScannerActive` declarado APENAS uma vez (linha ~593)
 - Shopee só aceita códigos `SPXBR\d+` — barcode bloqueado para Shopee
 - Envio Full Shopee: padrão `FBSINBR\d+` — obrigatório antes de bipar
 
