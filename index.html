@@ -223,6 +223,39 @@ header .hfunc strong{display:block;font-size:12px;}
 /* TOAST */
 #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--brand);color:white;padding:12px 24px;border-radius:24px;font-size:14px;font-weight:600;z-index:9999;transition:transform .3s ease;white-space:nowrap;pointer-events:none;}
 #toast.show{transform:translateX(-50%) translateY(0);}
+/* FINALIZAR OVERLAY */
+#expFinalizarOverlay{position:fixed;inset:0;background:linear-gradient(160deg,#1a1a2e 0%,#2d2d5e 100%);z-index:500;display:none;flex-direction:column;align-items:center;padding:24px 20px;overflow-y:auto;}
+#expFinalizarOverlay.show{display:flex;}
+.fin-check{font-size:64px;text-align:center;margin:20px 0 8px;}
+.fin-title{color:white;font-size:22px;font-weight:800;text-align:center;margin-bottom:4px;}
+.fin-sub{color:rgba(255,255,255,.6);font-size:13px;text-align:center;margin-bottom:20px;}
+.fin-summary{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:16px;padding:14px 16px;width:100%;max-width:380px;margin-bottom:20px;}
+.fin-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.08);}
+.fin-row:last-child{border:none;}
+.fin-row span:first-child{color:rgba(255,255,255,.55);font-size:12px;}
+.fin-row span:last-child{color:white;font-size:13px;font-weight:700;text-align:right;max-width:60%;}
+.fin-actions{width:100%;max-width:380px;padding-bottom:28px;}
+.fin-back{width:100%;padding:14px;border:2px solid rgba(255,255,255,.3);background:none;color:rgba(255,255,255,.8);font-size:14px;font-weight:700;border-radius:12px;cursor:pointer;margin-top:4px;display:block;}
+/* HISTORY MODAL */
+#expHistModal{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:600;display:none;align-items:flex-end;justify-content:center;}
+#expHistModal.show{display:flex;}
+.hist-modal-card{background:white;border-radius:20px 20px 0 0;padding:22px;width:100%;max-width:480px;max-height:80vh;display:flex;flex-direction:column;}
+.hist-modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
+.hist-modal-head h3{font-size:16px;font-weight:800;}
+.hist-modal-close{background:none;border:none;font-size:24px;color:#aaa;cursor:pointer;padding:0;}
+.hist-modal-sub{font-size:12px;color:#888;margin-bottom:14px;}
+.hist-modal-body{overflow-y:auto;flex:1;}
+.hist-pkg-row{font-size:11px;padding:7px 10px;background:#f5f5f5;border-radius:8px;margin-bottom:5px;display:flex;align-items:center;gap:8px;}
+.hist-pkg-num{font-size:10px;color:#aaa;font-weight:700;min-width:28px;flex-shrink:0;}
+.hist-pkg-code{font-family:monospace;flex:1;word-break:break-all;}
+.hist-pkg-mkt{font-size:10px;font-weight:800;padding:2px 6px;border-radius:4px;flex-shrink:0;}
+/* CLICKABLE HISTORY */
+.hist-item.clickable{cursor:pointer;transition:background .15s;}
+.hist-item.clickable:active{background:#f0f2f5;}
+.hist-item .hist-arrow{float:right;color:#bbb;font-size:16px;line-height:1;}
+/* DASH DELETE */
+.dash-del-btn{background:none;border:1.5px solid #ffcdd2;color:#e53935;font-size:11px;font-weight:700;padding:4px 10px;border-radius:7px;cursor:pointer;margin-top:8px;}
+.dash-del-btn:active{background:#fce4ec;}
 </style>
 </head>
 <body>
@@ -346,6 +379,8 @@ header .hfunc strong{display:block;font-size:12px;}
       <div class="sig-hint">Assine com o dedo acima</div>
       <button class="btn btn-secondary" onclick="clearSignature()" style="max-width:180px;padding:8px;font-size:13px;margin-top:10px">↺ Apagar</button>
     </div>
+    <button class="btn btn-success" onclick="expFinalizar()" style="font-size:17px;padding:17px;margin-top:4px">✅ Finalizar Coleta</button>
+    <div style="display:flex;align-items:center;gap:10px;max-width:420px;margin:14px auto 10px"><div style="flex:1;height:1px;background:#e0e0e0"></div><span style="font-size:11px;color:#bbb;font-weight:600;white-space:nowrap">OU AÇÕES AVULSAS</span><div style="flex:1;height:1px;background:#e0e0e0"></div></div>
     <button class="btn btn-pdf" onclick="gerarPDF()">📄 Gerar e Baixar PDF</button>
     <button class="btn btn-excel" onclick="expExportExcel()">📊 Exportar Excel (CSV)</button>
     <button class="btn btn-email" onclick="enviarEmail()">✉️ Enviar por Email</button>
@@ -486,6 +521,34 @@ header .hfunc strong{display:block;font-size:12px;}
     <div id="dashOpList"></div>
     <div id="dashEmpty" class="empty-state"><div class="icon">📊</div><p>Nenhuma operação no período.</p></div>
     <div id="dashFuncStats"></div>
+  </div>
+</div>
+
+<!-- FINALIZAR COLETA OVERLAY -->
+<div id="expFinalizarOverlay">
+  <div class="fin-check">✅</div>
+  <div class="fin-title">Coleta Finalizada!</div>
+  <div class="fin-sub" id="finSub">Registrado com sucesso</div>
+  <div class="fin-summary" id="finSummary"></div>
+  <div class="fin-actions">
+    <button class="btn btn-pdf" onclick="gerarPDF()">📄 Imprimir / Salvar PDF</button>
+    <button class="btn btn-whatsapp" onclick="expEnviarWhatsApp()">💬 Enviar por WhatsApp</button>
+    <button class="btn btn-email" onclick="enviarEmail()">✉️ Enviar por Email</button>
+    <button class="btn btn-excel" onclick="expExportExcel()">📊 Exportar Excel (CSV)</button>
+    <button class="fin-back" onclick="expVoltarCorrigir()">↩️ Voltar para corrigir</button>
+    <button class="btn btn-danger" onclick="expNovaColeta()" style="margin-top:4px">🔄 Nova Coleta</button>
+  </div>
+</div>
+
+<!-- MODAL HISTÓRICO PACOTES -->
+<div id="expHistModal">
+  <div class="hist-modal-card">
+    <div class="hist-modal-head">
+      <h3 id="histModalTitle">Pacotes da Coleta</h3>
+      <button class="hist-modal-close" onclick="document.getElementById('expHistModal').classList.remove('show')">✕</button>
+    </div>
+    <div class="hist-modal-sub" id="histModalSub"></div>
+    <div class="hist-modal-body" id="histModalBody"></div>
   </div>
 </div>
 
@@ -870,7 +933,20 @@ function expRenderHistory(){
   const list=document.getElementById('expHistList'),empty=document.getElementById('expHistEmpty');
   if(!hist.length){list.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
-  list.innerHTML=hist.slice().reverse().map(h=>`<div class="hist-item"><div class="hist-header"><span class="hist-badge">EXPEDIÇÃO</span><span class="hist-date">${h.data}</span></div><div class="hist-info">📦 ${h.total} pacotes · ${h.motorista||'Sem motorista'}</div><div class="hist-sub">Funcionário: ${h.func||'—'} · ${h.hora}</div></div>`).join('');
+  list.innerHTML=hist.slice().reverse().map((h,i)=>`<div class="hist-item clickable" onclick="expShowHistDetail(${i})"><div class="hist-header"><span class="hist-badge">EXPEDIÇÃO</span><span class="hist-date">${h.data}</span><span class="hist-arrow">›</span></div><div class="hist-info">📦 ${h.total} pacotes · ${h.motorista||'Sem motorista'}</div><div class="hist-sub">Funcionário: ${h.func||'—'} · ${h.hora}</div></div>`).join('');
+}
+function expShowHistDetail(reversedIdx){
+  const hist=JSON.parse(localStorage.getItem('exp_history')||'[]');
+  const h=hist.slice().reverse()[reversedIdx];if(!h)return;
+  document.getElementById('histModalTitle').textContent='Coleta — '+h.data;
+  document.getElementById('histModalSub').textContent=(h.total||0)+' pacotes · '+(h.motorista||'Sem motorista')+' · '+(h.func||'—')+' · '+h.hora;
+  const pkgs=h.pacotes||[];
+  if(!pkgs.length){
+    document.getElementById('histModalBody').innerHTML='<div style="text-align:center;padding:32px;color:#bbb">📋 Pacotes não disponíveis<br><small>Coleta registrada antes desta atualização</small></div>';
+  } else {
+    document.getElementById('histModalBody').innerHTML=pkgs.map((p,i)=>{const c=MKT_COLORS[p.mkt]||MKT_COLORS['Outros'];return`<div class="hist-pkg-row"><span class="hist-pkg-num">${String(i+1).padStart(3,'0')}</span><span class="hist-pkg-mkt" style="background:${c.bg};color:${c.color}">${p.mkt}</span><span class="hist-pkg-code">${p.code}</span></div>`;}).join('');
+  }
+  document.getElementById('expHistModal').classList.add('show');
 }
 
 // SIGNATURE
@@ -900,7 +976,7 @@ function expValidar(){
 }
 function expSaveHistory(d){
   const hist=JSON.parse(localStorage.getItem('exp_history')||'[]');
-  hist.push({data:d.data,hora:d.hora,total:d.total,motorista:d.motorista,placa:d.placa,func:d.funcionario,byMkt:d.byMkt});
+  hist.push({data:d.data,hora:d.hora,total:d.total,motorista:d.motorista,placa:d.placa,func:d.funcionario,byMkt:d.byMkt,pacotes:d.pacotes});
   if(hist.length>20)hist.shift();
   localStorage.setItem('exp_history',JSON.stringify(hist));
 }
@@ -968,15 +1044,35 @@ async function expEnviarWhatsApp(){
     else{const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=fname;a.click();setTimeout(()=>{URL.revokeObjectURL(url);window.open('https://web.whatsapp.com','_blank');},800);toast('📥 PDF baixado — annexe no WhatsApp');}
   }catch(e){if(e.name!=='AbortError')toast('❌ Erro: '+e.message);}
 }
+let expFinalized=false;
+function expFinalizar(){
+  if(!expValidar())return;
+  const d=expDados();
+  if(!expFinalized){
+    expSaveHistory(d);
+    fbSave('expedicao',{data:d.data,hora:d.hora,funcionario:d.funcionario,total:d.total,motorista:d.motorista,placa:d.placa,transportadora:d.transportadora,byMkt:d.byMkt,pacotes:d.pacotes,shopeeFullCode:d.shopeeFullCode||''});
+    expFinalized=true;
+  }
+  const byMktRows=Object.entries(d.byMkt).map(([m,n])=>`<div class="fin-row"><span>${m}</span><span>${n} pacotes</span></div>`).join('');
+  document.getElementById('finSummary').innerHTML=`<div class="fin-row"><span>Total de pacotes</span><span>${d.total}</span></div><div class="fin-row"><span>Motorista</span><span>${d.motorista}</span></div><div class="fin-row"><span>Transportadora</span><span>${d.transportadora||'—'}</span></div><div class="fin-row"><span>Placa</span><span>${d.placa||'—'}</span></div><div class="fin-row"><span>Funcionário</span><span>${d.funcionario}</span></div>${byMktRows}`;
+  document.getElementById('finSub').textContent='Registrado em '+d.data+' às '+d.hora;
+  document.getElementById('expFinalizarOverlay').classList.add('show');
+  toast('✅ Coleta finalizada e registrada!');
+}
+function expVoltarCorrigir(){
+  document.getElementById('expFinalizarOverlay').classList.remove('show');
+  toast('↩️ Corrija e finalize novamente se necessário');
+}
 function expNovaColeta(){
   if(!confirm('Iniciar nova coleta? Limpa a lista atual.'))return;
-  const d=expDados();
-  if(expPackages.length>0){
+  if(expPackages.length>0&&!expFinalized){
+    const d=expDados();
     expSaveHistory(d);
-    fbSave('expedicao',{data:d.data,hora:d.hora,funcionario:d.funcionario,total:d.total,motorista:d.motorista,placa:d.placa,transportadora:d.transportadora,byMkt:d.byMkt});
+    fbSave('expedicao',{data:d.data,hora:d.hora,funcionario:d.funcionario,total:d.total,motorista:d.motorista,placa:d.placa,transportadora:d.transportadora,byMkt:d.byMkt,pacotes:d.pacotes,shopeeFullCode:d.shopeeFullCode||''});
   }
-  expPackages=[];expSave();expRenderList();clearSignature();expClearFullCode();
+  expPackages=[];expSave();expRenderList();clearSignature();expClearFullCode();expFinalized=false;
   ['driverName','driverTransp','driverPlate'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('expFinalizarOverlay').classList.remove('show');
   sessionStart=Date.now();toast('🆕 Nova coleta iniciada!');
 }
 
@@ -1327,8 +1423,8 @@ function dashRender(ops){
   if(!ops.length){list.innerHTML='';empty.style.display='block';document.getElementById('dashFuncStats').innerHTML='';return;}
   empty.style.display='none';
   list.innerHTML=ops.map(o=>{
-    if(o._type==='exp')return`<div class="dash-op-item"><div class="dash-op-header"><span class="dash-op-type exp">EXPEDIÇÃO</span><span class="dash-op-date">${o.data||''} ${o.hora||''}</span></div><div class="dash-op-info">📦 ${o.total||0} pacotes · ${o.motorista||'Sem motorista'}</div><div class="dash-op-sub">👤 ${o.funcionario||'—'} · 🚗 ${o.placa||'—'}</div></div>`;
-    return`<div class="dash-op-item"><div class="dash-op-header"><span class="dash-op-type rec">RECEBIMENTO</span><span class="dash-op-date">${o.data||''} ${o.hora||''}</span></div><div class="dash-op-info">🏭 ${o.fornecedor||'—'} — NF ${o.nfNumero||'—'}</div><div class="dash-op-sub">👤 ${o.funcionario||'—'} · 📦 ${o.totalCaixas||0} caixas</div></div>`;
+    if(o._type==='exp')return`<div class="dash-op-item"><div class="dash-op-header"><span class="dash-op-type exp">EXPEDIÇÃO</span><span class="dash-op-date">${o.data||''} ${o.hora||''}</span></div><div class="dash-op-info">📦 ${o.total||0} pacotes · ${o.motorista||'Sem motorista'}</div><div class="dash-op-sub">👤 ${o.funcionario||'—'} · 🚗 ${o.placa||'—'}</div><button class="dash-del-btn" onclick="dashDelete('${o._key}','expedicao')">🗑️ Excluir registro</button></div>`;
+    return`<div class="dash-op-item"><div class="dash-op-header"><span class="dash-op-type rec">RECEBIMENTO</span><span class="dash-op-date">${o.data||''} ${o.hora||''}</span></div><div class="dash-op-info">🏭 ${o.fornecedor||'—'} — NF ${o.nfNumero||'—'}</div><div class="dash-op-sub">👤 ${o.funcionario||'—'} · 📦 ${o.totalCaixas||0} caixas</div><button class="dash-del-btn" onclick="dashDelete('${o._key}','recebimento')">🗑️ Excluir registro</button></div>`;
   }).join('');
   dashRenderFuncStats(ops);
 }
@@ -1345,6 +1441,16 @@ function dashRenderFuncStats(ops){
   if(!names.length){el.innerHTML='';return;}
   el.innerHTML=`<div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin:16px 0 10px">Por Funcionário</div>`+
     names.map(f=>{const s=byFunc[f];return`<div style="background:white;border-radius:12px;padding:12px 14px;margin-bottom:8px;box-shadow:0 1px 4px rgba(0,0,0,.06)"><div style="font-size:14px;font-weight:700;margin-bottom:8px">👤 ${f}</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center"><div><div style="font-size:18px;font-weight:800;color:var(--brand)">${s.exp}</div><div style="font-size:10px;color:#888">Expedições</div></div><div><div style="font-size:18px;font-weight:800;color:#2e7d32">${s.pkgs}</div><div style="font-size:10px;color:#888">Pacotes</div></div><div><div style="font-size:18px;font-weight:800;color:#1565c0">${s.rec}</div><div style="font-size:10px;color:#888">Recebimentos</div></div></div></div>`;}).join('');
+}
+function dashDelete(key,path){
+  if(!confirm('Excluir este registro permanentemente?\nEsta ação não pode ser desfeita.'))return;
+  ensureFirebase(()=>{
+    if(!db){toast('❌ Firebase não conectado');return;}
+    db.ref(path+'/'+key).remove();
+    dashOpsAll=dashOpsAll.filter(o=>o._key!==key);
+    dashRender(dashOpsAll);
+    toast('🗑️ Registro excluído');
+  });
 }
 function dashExportCSV(){
   if(!dashOpsAll.length){toast('⚠️ Nenhuma operação para exportar');return;}
