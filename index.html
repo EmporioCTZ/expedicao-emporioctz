@@ -229,8 +229,8 @@ header .hfunc strong{display:block;font-size:12px;}
 #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--brand);color:white;padding:12px 24px;border-radius:24px;font-size:14px;font-weight:600;z-index:9999;transition:transform .3s ease;white-space:nowrap;pointer-events:none;}
 #toast.show{transform:translateX(-50%) translateY(0);}
 /* FINALIZAR OVERLAY */
-#expFinalizarOverlay{position:fixed;inset:0;background:linear-gradient(160deg,#1a1a2e 0%,#2d2d5e 100%);z-index:500;display:none;flex-direction:column;align-items:center;padding:24px 20px;overflow-y:auto;}
-#expFinalizarOverlay.show{display:flex;}
+#expFinalizarOverlay,#recFinalizarOverlay{position:fixed;inset:0;background:linear-gradient(160deg,#1a1a2e 0%,#2d2d5e 100%);z-index:500;display:none;flex-direction:column;align-items:center;padding:24px 20px;overflow-y:auto;}
+#expFinalizarOverlay.show,#recFinalizarOverlay.show{display:flex;}
 .fin-check{font-size:64px;text-align:center;margin:20px 0 8px;}
 .fin-title{color:white;font-size:22px;font-weight:800;text-align:center;margin-bottom:4px;}
 .fin-sub{color:rgba(255,255,255,.6);font-size:13px;text-align:center;margin-bottom:20px;}
@@ -503,8 +503,15 @@ header .hfunc strong{display:block;font-size:12px;}
     <div id="recConfProdList"></div>
     <div id="recConfEmpty" class="empty-state" style="display:none"><div class="icon">🔍</div><p>Bipe produtos para conferir.</p></div>
     <div style="margin-top:16px" id="recConfActions">
+      <button class="btn btn-success" onclick="recFinalizar()" style="font-size:17px;padding:17px;margin-top:4px">✅ Finalizar Recebimento</button>
+      <div style="display:flex;align-items:center;gap:10px;max-width:420px;margin:14px auto 10px">
+        <div style="flex:1;height:1px;background:#e0e0e0"></div>
+        <span style="font-size:11px;color:#bbb;font-weight:600;white-space:nowrap">OU AÇÕES AVULSAS</span>
+        <div style="flex:1;height:1px;background:#e0e0e0"></div>
+      </div>
       <button class="btn btn-pdf" onclick="recGerarPDF()">📄 Gerar PDF do Recebimento</button>
       <button class="btn btn-whatsapp" onclick="recEnviarWhatsApp()">💬 Relatório pelo WhatsApp</button>
+      <button class="btn btn-excel" onclick="recExportExcel()">📊 Exportar Excel (CSV)</button>
       <button class="btn btn-danger" onclick="recReset()" style="margin-top:4px">🔄 Novo Recebimento</button>
     </div>
   </div>
@@ -576,6 +583,21 @@ header .hfunc strong{display:block;font-size:12px;}
     <button class="btn btn-excel" onclick="expExportExcel()">📊 Exportar Excel (CSV)</button>
     <button class="fin-back" onclick="expVoltarCorrigir()">↩️ Voltar para corrigir</button>
     <button class="btn btn-danger" onclick="expNovaColeta()" style="margin-top:4px">🔄 Nova Coleta</button>
+  </div>
+</div>
+
+<!-- RECEBIMENTO FINALIZAR OVERLAY -->
+<div id="recFinalizarOverlay">
+  <div class="fin-check">📥</div>
+  <div class="fin-title">Recebimento Finalizado!</div>
+  <div class="fin-sub" id="recFinSub">Registrado com sucesso</div>
+  <div class="fin-summary" id="recFinSummary"></div>
+  <div class="fin-actions">
+    <button class="btn btn-pdf" onclick="recGerarPDF()">📄 Imprimir / Salvar PDF</button>
+    <button class="btn btn-whatsapp" onclick="recEnviarWhatsApp()">💬 Enviar por WhatsApp</button>
+    <button class="btn btn-excel" onclick="recExportExcel()">📊 Exportar Excel (CSV)</button>
+    <button class="fin-back" onclick="recVoltarCorrigir()">↩️ Voltar para corrigir</button>
+    <button class="btn btn-danger" onclick="recNovaSessao()" style="margin-top:4px">🔄 Nova Sessão</button>
   </div>
 </div>
 
@@ -1089,6 +1111,7 @@ async function expEnviarWhatsApp(){
   }catch(e){if(e.name!=='AbortError')toast('❌ Erro: '+e.message);}
 }
 let expFinalized=false;
+let recFinalized=false;
 function expFinalizar(){
   if(!expValidar())return;
   const d=expDados();
@@ -1198,6 +1221,55 @@ function recReset(){
   document.getElementById('recNFInfo').style.display='none';
   ['recFornecedor','recNFNum','recNFVol'].forEach(id=>document.getElementById(id).value='');
   document.querySelectorAll('.fornecedor-btn').forEach(b=>b.classList.remove('selected'));
+  recFinalized=false;
+  document.getElementById('recFinalizarOverlay').classList.remove('show');
+  recRenderAll();recRenderCatalog();recRenderHistory();
+  const btn=document.querySelector('#recebimentoModule .tab-bar button:nth-child(1)');
+  showRecPage('nf',btn);toast('🔄 Nova sessão pronta');
+}
+function recFinalizar(){
+  if(!recSession.started||recSession.caixas.length===0){toast('⚠️ Inicie um recebimento e bipe ao menos uma caixa');return;}
+  const now=new Date();
+  const totals=recGetProductTotals();
+  const names=Object.keys(totals);
+  const bipado=recSession.caixas.length,nf=recSession.nfVolumes;
+  const volOk=bipado===nf;
+  const allOk=volOk&&names.every(n=>recVerification[n]?.status==='ok');
+  if(!recFinalized){
+    const hist=JSON.parse(localStorage.getItem('rec_history')||'[]');
+    hist.push({data:now.toLocaleDateString('pt-BR'),hora:now.toLocaleTimeString('pt-BR'),fornecedor:recSession.fornecedor,nfNumero:recSession.nfNumero,nfVolumes:recSession.nfVolumes,totalCaixas:recSession.caixas.length,func:funcionario,produtos:totals});
+    if(hist.length>20)hist.shift();
+    localStorage.setItem('rec_history',JSON.stringify(hist));
+    fbSave('recebimento',{data:now.toLocaleDateString('pt-BR'),hora:now.toLocaleTimeString('pt-BR'),funcionario,fornecedor:recSession.fornecedor,nfNumero:recSession.nfNumero,nfVolumes:recSession.nfVolumes,totalCaixas:recSession.caixas.length,produtos:totals});
+    recFinalized=true;
+  }
+  const unidTotal=names.reduce((s,n)=>s+totals[n].units,0);
+  document.getElementById('recFinSub').textContent=`${recSession.fornecedor} · NF ${recSession.nfNumero}`;
+  document.getElementById('recFinSummary').innerHTML=`
+    <div class="fin-row"><span>Fornecedor</span><span>${recSession.fornecedor||'—'}</span></div>
+    <div class="fin-row"><span>Nota Fiscal</span><span>${recSession.nfNumero||'—'}</span></div>
+    <div class="fin-row"><span>Volumes</span><span>${bipado}/${nf} ${volOk?'✅':'⚠️'}</span></div>
+    <div class="fin-row"><span>Produtos distintos</span><span>${names.length}</span></div>
+    <div class="fin-row"><span>Unidades totais</span><span>${unidTotal}</span></div>
+    <div class="fin-row"><span>Funcionário</span><span>${funcionario}</span></div>
+    <div class="fin-row"><span>Status</span><span>${allOk?'✅ Conforme NF':'⚠️ Divergências'}</span></div>`;
+  document.getElementById('recFinalizarOverlay').classList.add('show');
+  toast('✅ Recebimento finalizado e registrado!');
+}
+function recVoltarCorrigir(){
+  document.getElementById('recFinalizarOverlay').classList.remove('show');
+  toast('↩️ Corrija e finalize novamente se necessário');
+}
+function recNovaSessao(){
+  if(!confirm('Iniciar nova sessão? O recebimento atual será encerrado.'))return;
+  if(recScannerActive)recStopScanner();
+  recSession={fornecedor:'',nfNumero:'',nfVolumes:0,caixas:[],started:false};
+  recVerification={};recSaveSession();
+  document.getElementById('recNFInfo').style.display='none';
+  ['recFornecedor','recNFNum','recNFVol'].forEach(id=>document.getElementById(id).value='');
+  document.querySelectorAll('.fornecedor-btn').forEach(b=>b.classList.remove('selected'));
+  recFinalized=false;
+  document.getElementById('recFinalizarOverlay').classList.remove('show');
   recRenderAll();recRenderCatalog();recRenderHistory();
   const btn=document.querySelector('#recebimentoModule .tab-bar button:nth-child(1)');
   showRecPage('nf',btn);toast('🔄 Nova sessão pronta');
