@@ -210,6 +210,11 @@ header .hfunc strong{display:block;font-size:12px;}
 .dash-op-sub{font-size:11px;color:#888;margin-top:2px;}
 .firebase-badge{display:flex;align-items:center;gap:6px;font-size:11px;color:#888;padding:6px 10px;background:#f5f5f5;border-radius:8px;margin-bottom:12px;}
 .firebase-badge.online{color:#2e7d32;background:#e8f5e9;}
+/* FORNECEDOR GRID */
+.fornecedor-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:6px;}
+.fornecedor-btn{padding:10px 12px;border:2px solid #e0e0e0;border-radius:10px;background:white;font-size:13px;font-weight:600;color:#555;cursor:pointer;text-align:left;line-height:1.3;transition:all .15s;}
+.fornecedor-btn.selected{border-color:var(--brand);background:var(--brand);color:white;}
+.fornecedor-btn:active{transform:scale(.97);}
 /* FULL CODE CARD */
 .full-code-card{background:#fff8e1;border:2px solid #f9a825;border-radius:14px;padding:14px;margin-bottom:14px;max-width:420px;margin-left:auto;margin-right:auto;}
 .full-code-card label{display:block;font-size:11px;font-weight:700;color:#e65100;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;}
@@ -407,7 +412,26 @@ header .hfunc strong{display:block;font-size:12px;}
   </div>
   <!-- NF -->
   <div id="rec-page-nf" class="page active">
-    <div class="form-card"><label>Nome do Fornecedor</label><input type="text" id="recFornecedor" placeholder="Ex: Distribuidora ABC"/></div>
+    <div class="form-card">
+      <label>Nome do Fornecedor</label>
+      <input type="hidden" id="recFornecedor"/>
+      <div class="fornecedor-grid">
+        <button class="fornecedor-btn" onclick="recSelectFornecedor(this,'Kapazi')">Kapazi</button>
+        <button class="fornecedor-btn" onclick="recSelectFornecedor(this,'Secalux')">Secalux</button>
+        <button class="fornecedor-btn" onclick="recSelectFornecedor(this,'Maxeb')">Maxeb</button>
+        <button class="fornecedor-btn" onclick="recSelectFornecedor(this,'OVD Vonder Nove54')">OVD Vonder Nove54</button>
+        <button class="fornecedor-btn" onclick="recSelectFornecedor(this,'Jimo')">Jimo</button>
+        <button class="fornecedor-btn" onclick="recSelectFornecedor(this,'Astra')">Astra</button>
+        <button class="fornecedor-btn" onclick="recSelectFornecedor(this,'IBBL Culligan')">IBBL Culligan</button>
+        <button class="fornecedor-btn" onclick="recSelectFornecedor(this,'Arthi')">Arthi</button>
+        <button class="fornecedor-btn" onclick="recSelectFornecedor(this,'Viel')">Viel</button>
+        <button class="fornecedor-btn" onclick="recSelectFornecedor(this,'Class Home (Vidros)')">Class Home (Vidros)</button>
+        <button class="fornecedor-btn" onclick="recSelectFornecedor(this,'Cortelux')">Cortelux</button>
+        <button class="fornecedor-btn" onclick="recSelectFornecedor(this,'Empório CTZ')">Empório CTZ</button>
+        <button class="fornecedor-btn" onclick="recSelectFornecedor(this,'Starfer')">Starfer</button>
+        <button class="fornecedor-btn" onclick="recSelectFornecedor(this,'FLX Trevisan')">FLX Trevisan</button>
+      </div>
+    </div>
     <div class="form-card"><label>Número da Nota Fiscal</label><input type="text" id="recNFNum" placeholder="Ex: 123456" inputmode="numeric"/></div>
     <div class="form-card"><label>Quantidade de Volumes (NF)</label><input type="number" id="recNFVol" placeholder="Ex: 48" inputmode="numeric" min="1"/></div>
     <button class="btn btn-primary" onclick="recIniciar()">▶️ Iniciar Recebimento</button>
@@ -1098,6 +1122,16 @@ let ncPendingBarcode='',ncRowCount=1;
 })();
 
 function recSaveSession(){localStorage.setItem('rec_session',JSON.stringify(recSession));localStorage.setItem('rec_known',JSON.stringify(recKnown));localStorage.setItem('rec_verif',JSON.stringify(recVerification));}
+function recSelectFornecedor(btn,name){
+  document.querySelectorAll('.fornecedor-btn').forEach(b=>b.classList.remove('selected'));
+  btn.classList.add('selected');
+  document.getElementById('recFornecedor').value=name;
+}
+function recHighlightFornecedor(name){
+  document.querySelectorAll('.fornecedor-btn').forEach(b=>{
+    b.classList.toggle('selected',b.textContent.trim()===name);
+  });
+}
 function recLoadSession(){
   const s=localStorage.getItem('rec_session'),v=localStorage.getItem('rec_verif');
   if(s)recSession=JSON.parse(s);
@@ -1109,6 +1143,7 @@ function recLoadSession(){
     document.getElementById('recFornecedor').value=recSession.fornecedor;
     document.getElementById('recNFNum').value=recSession.nfNumero;
     document.getElementById('recNFVol').value=recSession.nfVolumes;
+    recHighlightFornecedor(recSession.fornecedor);
   }
 }
 function recIniciar(){
@@ -1142,6 +1177,7 @@ function recReset(){
   recVerification={};recSaveSession();
   document.getElementById('recNFInfo').style.display='none';
   ['recFornecedor','recNFNum','recNFVol'].forEach(id=>document.getElementById(id).value='');
+  document.querySelectorAll('.fornecedor-btn').forEach(b=>b.classList.remove('selected'));
   recRenderAll();recRenderCatalog();recRenderHistory();
   const btn=document.querySelector('#recebimentoModule .tab-bar button:nth-child(1)');
   showRecPage('nf',btn);toast('🔄 Nova sessão pronta');
