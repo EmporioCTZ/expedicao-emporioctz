@@ -261,6 +261,21 @@ header .hfunc strong{display:block;font-size:12px;}
 /* DASH DELETE */
 .dash-del-btn{background:none;border:1.5px solid #ffcdd2;color:#e53935;font-size:11px;font-weight:700;padding:4px 10px;border-radius:7px;cursor:pointer;margin-top:8px;}
 .dash-del-btn:active{background:#fce4ec;}
+/* OLIST SEARCH */
+.nc-olist-status{padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;margin-bottom:10px;}
+.nc-olist-status.loading{background:#e8eaf6;color:var(--brand);}
+.nc-olist-status.found{background:#e8f5e9;color:#2e7d32;}
+.nc-olist-status.notfound{background:#f5f5f5;color:#aaa;}
+.nc-olist-search{position:relative;margin-bottom:12px;}
+.nc-olist-search input{width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:13px;outline:none;background:white;}
+.nc-olist-search input:focus{border-color:var(--brand);}
+.nc-olist-results{position:absolute;top:calc(100% + 4px);left:0;right:0;background:white;border:1.5px solid #ddd;border-radius:10px;max-height:210px;overflow-y:auto;z-index:200;display:none;box-shadow:0 4px 16px rgba(0,0,0,.12);}
+.nc-olist-results.show{display:block;}
+.nc-olist-result-item{padding:10px 12px;cursor:pointer;border-bottom:1px solid #f0f0f0;font-size:12px;}
+.nc-olist-result-item:last-child{border:none;}
+.nc-olist-result-item:active{background:#f0f2f5;}
+.nc-olist-result-item .r-nome{font-weight:700;color:#1a1a2e;line-height:1.3;}
+.nc-olist-result-item .r-sku{color:#888;font-size:11px;margin-top:2px;}
 </style>
 </head>
 <body>
@@ -581,6 +596,11 @@ header .hfunc strong{display:block;font-size:12px;}
   <div class="nc-card">
     <h3>📦 Nova caixa — informe o produto</h3>
     <div class="nc-barcode" id="ncBarcode"></div>
+    <div id="ncOlistStatus" style="display:none"></div>
+    <div class="nc-olist-search" id="ncOlistSearchWrap">
+      <input type="text" id="ncOlistSearch" placeholder="🔍 Buscar produto no Olist por nome..." autocomplete="off" autocorrect="off" oninput="ncOlistSearchInput(this.value)" onblur="setTimeout(()=>document.getElementById('ncOlistResults').classList.remove('show'),200)"/>
+      <div id="ncOlistResults" class="nc-olist-results"></div>
+    </div>
     <div class="nc-multi-row">
       <input type="checkbox" id="ncMulti" onchange="ncToggleMulti()">
       <label for="ncMulti">Caixa com múltiplos produtos diferentes</label>
@@ -1359,6 +1379,8 @@ function catDelete(barcode){
 function catEdit(barcode){
   const data=recKnown[barcode];if(!data)return;
   ncPendingBarcode=barcode;
+  ncOlistReset();
+  document.getElementById('ncOlistSearchWrap').style.display='none';
   document.getElementById('ncBarcode').textContent=barcode;
   document.getElementById('ncMulti').checked=data.products.length>1;
   const rows=document.getElementById('ncRows');rows.innerHTML='';
@@ -1378,13 +1400,67 @@ function recRenderHistory(){
   list.innerHTML=hist.slice().reverse().map(h=>`<div class="hist-item"><div class="hist-header"><span class="hist-badge">RECEBIMENTO</span><span class="hist-date">${h.data}</span></div><div class="hist-info">🏭 ${h.fornecedor} — NF ${h.nfNumero}</div><div class="hist-sub">📦 ${h.totalCaixas} caixas · Funcionário: ${h.func||'—'} · ${h.hora}</div></div>`).join('');
 }
 
+// OLIST — busca por EAN e por nome
+const OLIST_API='/api/olist/produto';
+async function ncLookupEAN(ean){
+  const el=document.getElementById('ncOlistStatus');
+  el.className='nc-olist-status loading';el.textContent='🔍 Buscando no Olist...';el.style.display='block';
+  try{
+    const resp=await fetch(OLIST_API+'?ean='+encodeURIComponent(ean));
+    if(!resp.ok)throw new Error();
+    const data=await resp.json();
+    if(data.produtos&&data.produtos.length){
+      const p=data.produtos[0];
+      el.className='nc-olist-status found';
+      el.textContent='✅ '+p.nome+(p.sku?' · SKU: '+p.sku:'');
+      const inp=document.getElementById('ncName_0');
+      if(inp&&!inp.value)inp.value=p.nome;
+    } else {
+      el.className='nc-olist-status notfound';
+      el.textContent='📋 Não encontrado no Olist — preencha manualmente';
+    }
+  }catch(e){el.style.display='none';}
+}
+let _ncSearchTimer;
+function ncOlistSearchInput(val){
+  const res=document.getElementById('ncOlistResults');
+  clearTimeout(_ncSearchTimer);
+  if(!val||val.length<2){res.classList.remove('show');return;}
+  _ncSearchTimer=setTimeout(async()=>{
+    try{
+      const resp=await fetch(OLIST_API+'?q='+encodeURIComponent(val));
+      if(!resp.ok)throw new Error();
+      const data=await resp.json();
+      if(!data.produtos||!data.produtos.length){res.classList.remove('show');return;}
+      res.innerHTML=data.produtos.slice(0,10).map(p=>`<div class="nc-olist-result-item" onmousedown="ncSelectOlistProduct('${p.nome.replace(/'/g,"\\'")}')"><div class="r-nome">${p.nome}</div><div class="r-sku">SKU: ${p.sku||'—'} · EAN: ${p.ean||'—'}</div></div>`).join('');
+      res.classList.add('show');
+    }catch(e){}
+  },400);
+}
+function ncSelectOlistProduct(nome){
+  const inp=document.getElementById('ncName_0');
+  if(inp)inp.value=nome;
+  document.getElementById('ncOlistResults').classList.remove('show');
+  document.getElementById('ncOlistSearch').value='';
+  setTimeout(()=>{const q=document.getElementById('ncQty_0');if(q)q.focus();},50);
+  toast('✅ '+nome);
+}
+function ncOlistReset(){
+  const s=document.getElementById('ncOlistStatus');if(s){s.style.display='none';}
+  const r=document.getElementById('ncOlistResults');if(r)r.classList.remove('show');
+  const i=document.getElementById('ncOlistSearch');if(i)i.value='';
+}
+
 // MODAL NOVA CAIXA
 function recShowNovaCaixaModal(barcode){
   if(recScannerActive)recStopScanner();
   ncPendingBarcode=barcode;ncRowCount=1;
   document.getElementById('ncBarcode').textContent=barcode;
   document.getElementById('ncMulti').checked=false;ncToggleMulti();
+  ncOlistReset();
+  document.getElementById('ncOlistSearchWrap').style.display='block';
   document.getElementById('modalNovaCaixa').classList.add('show');
+  ncLookupEAN(barcode);
   setTimeout(()=>{const inp=document.querySelector('#ncRows .prod-input-row input');if(inp)inp.focus();},300);
 }
 function ncToggleMulti(){
