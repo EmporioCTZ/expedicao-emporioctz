@@ -276,6 +276,49 @@ header .hfunc strong{display:block;font-size:12px;}
 .nc-olist-result-item:active{background:#f0f2f5;}
 .nc-olist-result-item .r-nome{font-weight:700;color:#1a1a2e;line-height:1.3;}
 .nc-olist-result-item .r-sku{color:#888;font-size:11px;margin-top:2px;}
+/* WIZARD RECEBIMENTO */
+.rec-wizard-bar{padding:10px 14px 8px;background:white;border-bottom:1px solid #eee;position:sticky;top:60px;z-index:99;}
+.rec-wizard-steps{display:flex;align-items:center;margin-bottom:8px;}
+.rwstep{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:64px;transition:opacity .2s;}
+.rwstep.done{cursor:pointer;}
+.rw-num{width:28px;height:28px;border-radius:50%;border:2px solid #ddd;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;background:white;color:#ccc;transition:all .25s;}
+.rwstep.active .rw-num{border-color:var(--brand);background:var(--brand);color:white;}
+.rwstep.done .rw-num{border-color:#4caf50;background:#4caf50;color:white;font-size:10px;}
+.rw-lbl{font-size:10px;font-weight:700;color:#ccc;transition:color .25s;}
+.rwstep.active .rw-lbl{color:var(--brand);}
+.rwstep.done .rw-lbl{color:#4caf50;}
+.rw-line{flex:1;height:2px;background:#e0e0e0;border-radius:2px;margin-bottom:14px;transition:background .25s;}
+.rw-line.done{background:#4caf50;}
+/* PERSISTENT COUNTER */
+#recPersistCounter{display:none;background:var(--brand);border-radius:10px;padding:8px 12px;flex-direction:column;gap:5px;}
+#recPersistCounter.show{display:flex;}
+.rpc-row{display:flex;justify-content:space-between;align-items:center;}
+.rpc-count{color:white;font-size:13px;font-weight:700;}
+.rpc-pct{color:rgba(255,255,255,.6);font-size:12px;}
+.rpc-bar-bg{background:rgba(255,255,255,.2);border-radius:6px;height:6px;overflow:hidden;}
+.rpc-bar-fill{height:100%;background:#66bb6a;border-radius:6px;transition:width .4s;}
+.rpc-bar-fill.over{background:#ef9a9a;}
+/* UTILITY BAR */
+.rec-util-bar{display:flex;gap:6px;padding:5px 14px 4px;background:#fafafa;border-bottom:1px solid #f0f0f0;}
+.rec-util-btn{flex:1;padding:5px 4px;border:1px solid #e8e8e8;background:white;border-radius:8px;font-size:10px;font-weight:700;color:#888;cursor:pointer;text-align:center;}
+.rec-util-btn:active{background:#efefef;}
+/* STEP NAV */
+.rec-step-nav{display:flex;gap:10px;margin-top:20px;padding-bottom:8px;max-width:420px;margin-left:auto;margin-right:auto;}
+.btn-step-back{padding:14px 20px;border:2px solid #e0e0e0;background:white;color:#666;font-weight:700;border-radius:12px;cursor:pointer;font-size:14px;flex-shrink:0;transition:all .15s;}
+.btn-step-back:active{background:#f5f5f5;}
+.btn-step-next{flex:1;padding:14px;background:var(--brand);color:white;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;}
+.btn-step-next:active{opacity:.85;}
+/* SUPPLIER MEMORY */
+#recMemoriaFornecedor{display:none;background:white;border-radius:14px;padding:12px 14px;margin-bottom:14px;box-shadow:0 1px 6px rgba(0,0,0,.07);}
+.rec-memory-title{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;}
+.rec-memory-grid{display:flex;flex-direction:column;gap:6px;}
+.rec-memory-btn{padding:10px 14px;border:1.5px solid #e8eaf6;border-radius:10px;background:#f5f5ff;color:var(--brand);font-size:13px;font-weight:700;cursor:pointer;text-align:left;display:flex;align-items:center;justify-content:space-between;transition:all .15s;}
+.rec-memory-btn:active{background:#e8eaf6;}
+.rec-memory-sub{font-size:11px;color:#888;font-weight:400;margin-top:2px;}
+.rec-memory-add{font-size:24px;color:var(--brand);font-weight:300;line-height:1;flex-shrink:0;margin-left:10px;}
+/* SECONDARY BACK */
+.rec-sec-back{padding:0 0 12px;}
+.rec-sec-back button{background:none;border:none;color:var(--brand);font-weight:700;font-size:14px;cursor:pointer;padding:4px 0;display:flex;align-items:center;gap:4px;}
 </style>
 </head>
 <body>
@@ -412,18 +455,40 @@ header .hfunc strong{display:block;font-size:12px;}
 <!-- RECEBIMENTO -->
 <div id="recebimentoModule" class="module">
   <header>
-    <button class="hback" onclick="goHome()">←</button>
+    <button class="hback" onclick="recHandleBack()">←</button>
     <div id="recLogo"><div class="hlogo-text">EMPÓRIO<br>CTZ</div></div>
     <div class="hinfo"><h1>Recebimento</h1><small id="recDate"></small></div>
     <div class="hfunc"><span style="opacity:.7;font-size:10px">Funcionário</span><strong id="recFunc">—</strong><button class="trocar-btn" onclick="trocarFuncionario()">✏️ trocar</button></div>
   </header>
-  <div class="tab-bar">
-    <button class="active" onclick="showRecPage('nf',this)">📄 NF</button>
-    <button onclick="showRecPage('scanner',this)">📷 Scanner</button>
-    <button onclick="showRecPage('produtos',this)">📦 Produtos</button>
-    <button onclick="showRecPage('conferencia',this)">✅ Conferência</button>
-    <button onclick="showRecPage('catalogo',this)">🗂️ Catálogo</button>
-    <button onclick="showRecPage('historico',this)">🕐 Histórico</button>
+  <div class="rec-wizard-bar">
+    <div class="rec-wizard-steps">
+      <div class="rwstep active" id="rwStep1" onclick="if(this.classList.contains('done'))recGoToStep(1)">
+        <div class="rw-num" id="rwNum1">1</div>
+        <span class="rw-lbl">NF</span>
+      </div>
+      <div class="rw-line" id="rwLine1"></div>
+      <div class="rwstep" id="rwStep2" onclick="if(this.classList.contains('done'))recGoToStep(2)">
+        <div class="rw-num" id="rwNum2">2</div>
+        <span class="rw-lbl">Bipagem</span>
+      </div>
+      <div class="rw-line" id="rwLine2"></div>
+      <div class="rwstep" id="rwStep3" onclick="if(this.classList.contains('done'))recGoToStep(3)">
+        <div class="rw-num" id="rwNum3">3</div>
+        <span class="rw-lbl">Conferência</span>
+      </div>
+    </div>
+    <div id="recPersistCounter">
+      <div class="rpc-row">
+        <span class="rpc-count">📦 <b id="rpcBipado">0</b> / <b id="rpcTotal">0</b> volumes</span>
+        <span class="rpc-pct" id="rpcPct">0%</span>
+      </div>
+      <div class="rpc-bar-bg"><div class="rpc-bar-fill" id="rpcBar" style="width:0%"></div></div>
+    </div>
+  </div>
+  <div class="rec-util-bar">
+    <button class="rec-util-btn" onclick="recShowSec('produtos')">📦 Produtos</button>
+    <button class="rec-util-btn" onclick="recShowSec('catalogo')">🗂️ Catálogo</button>
+    <button class="rec-util-btn" onclick="recShowSec('historico')">🕐 Histórico</button>
   </div>
   <!-- NF -->
   <div id="rec-page-nf" class="page active">
@@ -460,6 +525,10 @@ header .hfunc strong{display:block;font-size:12px;}
   </div>
   <!-- SCANNER -->
   <div id="rec-page-scanner" class="page">
+    <div id="recMemoriaFornecedor">
+      <div class="rec-memory-title">Caixas frequentes: <span id="recMemNome"></span></div>
+      <div id="recMemoriaList" class="rec-memory-grid"></div>
+    </div>
     <div class="summary-card g3" style="margin-bottom:14px">
       <div class="stat"><div class="num" id="recVolBipado">0</div><div class="label">Vol. Bipados</div></div>
       <div class="stat"><div class="num" id="recVolNF">—</div><div class="label">Vol. NF</div></div>
@@ -485,9 +554,14 @@ header .hfunc strong{display:block;font-size:12px;}
       <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Últimas caixas</div>
       <div id="recCaixaList"></div>
     </div>
+    <div class="rec-step-nav">
+      <button class="btn-step-back" onclick="recGoToStep(1)">← NF</button>
+      <button class="btn-step-next" onclick="recGoToStep(3)">✅ Conferir →</button>
+    </div>
   </div>
   <!-- PRODUTOS -->
   <div id="rec-page-produtos" class="page">
+    <div class="rec-sec-back"><button onclick="recHandleBack()">← Voltar</button></div>
     <div class="summary-card g2">
       <div class="stat"><div class="num" id="recProdTotal">0</div><div class="label">Produtos distintos</div></div>
       <div class="stat"><div class="num" id="recUnidTotal">0</div><div class="label">Unidades totais</div></div>
@@ -498,6 +572,9 @@ header .hfunc strong{display:block;font-size:12px;}
   </div>
   <!-- CONFERÊNCIA -->
   <div id="rec-page-conferencia" class="page">
+    <div class="rec-step-nav" style="margin-bottom:14px">
+      <button class="btn-step-back" onclick="recGoToStep(2)">← Bipagem</button>
+    </div>
     <div id="recConfVolCard" class="form-card" style="margin-bottom:14px"></div>
     <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Conferência por Produto</div>
     <div id="recConfProdList"></div>
@@ -517,6 +594,7 @@ header .hfunc strong{display:block;font-size:12px;}
   </div>
   <!-- CATÁLOGO -->
   <div id="rec-page-catalogo" class="page">
+    <div class="rec-sec-back"><button onclick="recHandleBack()">← Voltar</button></div>
     <div class="form-card" style="background:#e8eaf6">
       <div style="font-size:13px;font-weight:700;color:var(--brand);margin-bottom:4px">🗂️ Catálogo de Produtos</div>
       <div style="font-size:12px;color:#555">Todos os códigos de barras cadastrados no sistema. Toque no ✕ para remover.</div>
@@ -526,6 +604,7 @@ header .hfunc strong{display:block;font-size:12px;}
   </div>
   <!-- HISTÓRICO REC -->
   <div id="rec-page-historico" class="page">
+    <div class="rec-sec-back"><button onclick="recHandleBack()">← Voltar</button></div>
     <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Últimos recebimentos</div>
     <div id="recHistList"></div>
     <div id="recHistEmpty" class="empty-state"><div class="icon">📋</div><p>Nenhum recebimento concluído.</p></div>
@@ -764,7 +843,7 @@ function goTo(mod){
       document.getElementById('expModeBar').classList.add('disabled-mode');
     }
   }
-  if(mod==='recebimento'){document.getElementById('recebimentoModule').classList.add('active');document.getElementById('recDate').textContent=d;recLoadSession();recRenderAll();recRenderCatalog();recRenderHistory();}
+  if(mod==='recebimento'){document.getElementById('recebimentoModule').classList.add('active');document.getElementById('recDate').textContent=d;recLoadSession();recRenderAll();recRenderCatalog();recRenderHistory();recGoToStep(recCurrentStep);}
   if(mod==='dash'){document.getElementById('dashModule').classList.add('active');dashCheckAuth();}
 }
 
@@ -1112,6 +1191,8 @@ async function expEnviarWhatsApp(){
 }
 let expFinalized=false;
 let recFinalized=false;
+let recCurrentStep=1;
+let recLastWizardStep=1;
 function expFinalizar(){
   if(!expValidar())return;
   const d=expDados();
@@ -1187,6 +1268,7 @@ function recLoadSession(){
     document.getElementById('recNFNum').value=recSession.nfNumero;
     document.getElementById('recNFVol').value=recSession.nfVolumes;
     recHighlightFornecedor(recSession.fornecedor);
+    recCurrentStep=2;
   }
 }
 function recIniciar(){
@@ -1201,8 +1283,7 @@ function recIniciar(){
   document.getElementById('recNFInfo').style.display='block';
   document.getElementById('recNFSummary').textContent=`Fornecedor: ${f} | NF: ${n} | ${v} volumes`;
   recRenderAll();
-  const btn=document.querySelector('#recebimentoModule .tab-bar button:nth-child(2)');
-  showRecPage('scanner',btn);toast('✅ Sessão iniciada! Bipe as caixas.');
+  recGoToStep(2);toast('✅ Sessão iniciada! Bipe as caixas.');
 }
 function recReset(){
   if(!confirm('Cancelar e iniciar nova?'))return;
@@ -1224,8 +1305,7 @@ function recReset(){
   recFinalized=false;
   document.getElementById('recFinalizarOverlay').classList.remove('show');
   recRenderAll();recRenderCatalog();recRenderHistory();
-  const btn=document.querySelector('#recebimentoModule .tab-bar button:nth-child(1)');
-  showRecPage('nf',btn);toast('🔄 Nova sessão pronta');
+  recGoToStep(1);toast('🔄 Nova sessão pronta');
 }
 function recFinalizar(){
   if(!recSession.started||recSession.caixas.length===0){toast('⚠️ Inicie um recebimento e bipe ao menos uma caixa');return;}
@@ -1271,19 +1351,22 @@ function recNovaSessao(){
   recFinalized=false;
   document.getElementById('recFinalizarOverlay').classList.remove('show');
   recRenderAll();recRenderCatalog();recRenderHistory();
-  const btn=document.querySelector('#recebimentoModule .tab-bar button:nth-child(1)');
-  showRecPage('nf',btn);toast('🔄 Nova sessão pronta');
+  recGoToStep(1);toast('🔄 Nova sessão pronta');
 }
 function showRecPage(name,btn){
+  const secPages=['produtos','catalogo','historico'];
+  if(secPages.includes(name)){recLastWizardStep=recCurrentStep>0?recCurrentStep:recLastWizardStep;recCurrentStep=0;}
   document.querySelectorAll('#recebimentoModule .page').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('#recebimentoModule .tab-bar button').forEach(b=>b.classList.remove('active'));
-  document.getElementById('rec-page-'+name).classList.add('active');btn.classList.add('active');
+  document.getElementById('rec-page-'+name).classList.add('active');
   if(name!=='scanner'&&recScannerActive)recStopScanner();
   if(name==='produtos')recRenderProdutos();
   if(name==='conferencia')recRenderConferencia();
   if(name==='catalogo')recRenderCatalog();
   if(name==='historico')recRenderHistory();
+  if(name==='scanner')recShowMemoriaFornecedor();
+  window.scrollTo(0,0);
 }
+function recShowSec(name){showRecPage(name,null);}
 function recSetScanMode(mode,btn){
   if(btn.classList.contains('disabled-mode'))return;
   recScanMode=mode;
@@ -1339,6 +1422,7 @@ function recUpdateScannerUI(){
   const pct=nf?Math.min(100,Math.round(bipado/nf*100)):0;
   document.getElementById('recVolPct').textContent=pct+'%';
   const bar=document.getElementById('recVolBar');bar.style.width=pct+'%';bar.className='vol-bar-fill'+(bipado>nf?' over':'');
+  recUpdatePersistCounter();
 }
 function recRenderCaixaList(){
   const list=document.getElementById('recCaixaList');
@@ -1553,10 +1637,80 @@ function ncConfirm(){
   for(let i=0;i<ncRowCount;i++){const n=document.getElementById('ncName_'+i),q=document.getElementById('ncQty_'+i);if(!n||!q)continue;const name=n.value.trim(),qty=parseInt(q.value)||0;if(name&&qty>0)products.push({name,qty});}
   if(!products.length){toast('⚠️ Informe produto e quantidade');return;}
   const barcode=ncPendingBarcode;
-  recKnown[barcode]={products,since:(recKnown[barcode]&&recKnown[barcode].since)||new Date().toLocaleDateString('pt-BR')};localStorage.setItem('rec_known',JSON.stringify(recKnown));
+  recKnown[barcode]={products,since:(recKnown[barcode]&&recKnown[barcode].since)||new Date().toLocaleDateString('pt-BR'),supplier:recSession.fornecedor||''};localStorage.setItem('rec_known',JSON.stringify(recKnown));
   document.getElementById('modalNovaCaixa').classList.remove('show');
   recAddCaixa(barcode,{products});
 }
+
+// ─── WIZARD ──────────────────────────────────────────────────────────────────
+function recGoToStep(n){
+  recCurrentStep=n;
+  if(n>=1)recLastWizardStep=n;
+  // Update step indicators
+  [1,2,3].forEach(i=>{
+    const s=document.getElementById('rwStep'+i);
+    const nm=document.getElementById('rwNum'+i);
+    if(!s)return;
+    s.className='rwstep'+(i===n?' active':i<n?' done':'');
+    nm.textContent=i<n?'✓':String(i);
+  });
+  const l1=document.getElementById('rwLine1'),l2=document.getElementById('rwLine2');
+  if(l1)l1.className='rw-line'+(n>1?' done':'');
+  if(l2)l2.className='rw-line'+(n>2?' done':'');
+  // Show page
+  const pageMap={1:'nf',2:'scanner',3:'conferencia'};
+  if(pageMap[n]){
+    document.querySelectorAll('#recebimentoModule .page').forEach(p=>p.classList.remove('active'));
+    document.getElementById('rec-page-'+pageMap[n]).classList.add('active');
+  }
+  if(n!==2&&recScannerActive)recStopScanner();
+  if(n===2){recShowMemoriaFornecedor();recUpdateScannerUI();}
+  if(n===3)recRenderConferencia();
+  recUpdatePersistCounter();
+  window.scrollTo(0,0);
+}
+function recHandleBack(){
+  if(recCurrentStep===0){recGoToStep(recLastWizardStep);}
+  else if(recCurrentStep<=1){goHome();}
+  else{recGoToStep(recCurrentStep-1);}
+}
+function recUpdatePersistCounter(){
+  const bipado=recSession.caixas.length,nf=recSession.nfVolumes;
+  const counter=document.getElementById('recPersistCounter');
+  if(!counter)return;
+  if(!recSession.started||!nf){counter.classList.remove('show');return;}
+  counter.classList.add('show');
+  const b=document.getElementById('rpcBipado'),t=document.getElementById('rpcTotal');
+  if(b)b.textContent=bipado;if(t)t.textContent=nf;
+  const pct=nf?Math.min(100,Math.round(bipado/nf*100)):0;
+  const pctEl=document.getElementById('rpcPct');if(pctEl)pctEl.textContent=pct+'%';
+  const bar=document.getElementById('rpcBar');
+  if(bar){bar.style.width=pct+'%';bar.className='rpc-bar-fill'+(bipado>nf?' over':'');}
+}
+function recShowMemoriaFornecedor(){
+  const wrap=document.getElementById('recMemoriaFornecedor');
+  const list=document.getElementById('recMemoriaList');
+  const nomeEl=document.getElementById('recMemNome');
+  if(!wrap)return;
+  const forn=recSession.fornecedor;
+  if(!forn){wrap.style.display='none';return;}
+  const known=Object.entries(recKnown).filter(([,v])=>v.supplier===forn);
+  if(!known.length){wrap.style.display='none';return;}
+  if(nomeEl)nomeEl.textContent=forn;
+  list.innerHTML=known.map(([barcode,data])=>{
+    const prods=data.products.map(p=>`${p.name} ×${p.qty}`).join(', ');
+    const esc=barcode.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return`<button class="rec-memory-btn" onclick="recMemoriaAdd('${esc}')">
+      <div><div>${prods}</div><div class="rec-memory-sub">${barcode.length>24?barcode.slice(0,24)+'…':barcode}</div></div>
+      <span class="rec-memory-add">＋</span></button>`;
+  }).join('');
+  wrap.style.display='block';
+}
+function recMemoriaAdd(barcode){
+  if(!recKnown[barcode]){toast('⚠️ Caixa não encontrada no catálogo');return;}
+  recAddCaixa(barcode,recKnown[barcode]);
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ═══════════════ DASHBOARD ═══════════════
 let dashAuthenticated=sessionStorage.getItem('dash_auth')==='1';
