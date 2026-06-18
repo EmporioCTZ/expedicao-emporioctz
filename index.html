@@ -318,6 +318,21 @@ header .hfunc strong{display:block;font-size:12px;}
 .rec-memory-btn:active{background:#e8eaf6;}
 .rec-memory-sub{font-size:11px;color:#888;font-weight:400;margin-top:2px;}
 .rec-memory-add{font-size:24px;color:var(--brand);font-weight:300;line-height:1;flex-shrink:0;margin-left:10px;}
+/* BUSCA NO CATÁLOGO (caixa por nº, produto ou código) */
+.rec-cat-search{position:relative;margin-bottom:14px;}
+.rec-cat-search input{width:100%;padding:12px 14px;border:2px solid #e0e0e0;border-radius:12px;font-size:14px;outline:none;background:white;}
+.rec-cat-search input:focus{border-color:var(--brand);}
+.rec-cat-results{position:absolute;top:calc(100% + 4px);left:0;right:0;background:white;border:1.5px solid #ddd;border-radius:12px;max-height:300px;overflow-y:auto;z-index:200;display:none;box-shadow:0 6px 20px rgba(0,0,0,.15);}
+.rec-cat-results.show{display:block;}
+.rec-cat-head{padding:8px 13px;font-size:10px;font-weight:800;color:#aaa;text-transform:uppercase;letter-spacing:.5px;background:#fafafa;border-bottom:1px solid #f0f0f0;position:sticky;top:0;}
+.rec-cat-item{padding:11px 13px;cursor:pointer;border-bottom:1px solid #f0f0f0;display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.rec-cat-item:last-child{border:none;}
+.rec-cat-item:active{background:#f0f2f5;}
+.rec-cat-item .rc-info{min-width:0;flex:1;}
+.rec-cat-item .rc-name{font-size:13px;font-weight:700;color:#1a1a2e;line-height:1.3;}
+.rec-cat-item .rc-sub{font-size:11px;color:#888;margin-top:2px;word-break:break-all;}
+.rec-cat-item .rc-add{font-size:24px;color:var(--brand);font-weight:300;flex-shrink:0;}
+.rec-cat-empty{padding:16px;text-align:center;color:#aaa;font-size:12px;}
 /* SECONDARY BACK */
 .rec-sec-back{padding:0 0 12px;}
 .rec-sec-back button{background:none;border:none;color:var(--brand);font-weight:700;font-size:14px;cursor:pointer;padding:4px 0;display:flex;align-items:center;gap:4px;}
@@ -548,9 +563,9 @@ header .hfunc strong{display:block;font-size:12px;}
   </div>
   <!-- SCANNER -->
   <div id="rec-page-scanner" class="page">
-    <div id="recMemoriaFornecedor">
-      <div class="rec-memory-title">Caixas frequentes: <span id="recMemNome"></span></div>
-      <div id="recMemoriaList" class="rec-memory-grid"></div>
+    <div class="rec-cat-search">
+      <input type="text" id="recCatSearch" inputmode="search" autocomplete="off" placeholder="🔍 Buscar caixa salva: nº, produto ou código" oninput="recCatSearchInput(this.value)" onfocus="recCatSearchInput(this.value)" onblur="setTimeout(()=>{var r=document.getElementById('recCatResults');if(r)r.classList.remove('show')},220)"/>
+      <div id="recCatResults" class="rec-cat-results"></div>
     </div>
     <div class="summary-card g3" style="margin-bottom:14px">
       <div class="stat"><div class="num" id="recVolBipado">0</div><div class="label">Vol. Bipados</div></div>
@@ -867,7 +882,7 @@ function goTo(mod){
       document.getElementById('expModeBar').classList.add('disabled-mode');
     }
   }
-  if(mod==='recebimento'){document.getElementById('recebimentoModule').classList.add('active');document.getElementById('recDate').textContent=d;recLoadSession();recRenderAll();recRenderCatalog();recRenderHistory();recGoToStep(recCurrentStep);}
+  if(mod==='recebimento'){document.getElementById('recebimentoModule').classList.add('active');document.getElementById('recDate').textContent=d;recLoadSession();recLoadCatalog();recRenderAll();recRenderCatalog();recRenderHistory();recGoToStep(recCurrentStep);}
   if(mod==='dash'){document.getElementById('dashModule').classList.add('active');dashCheckAuth();}
 }
 
@@ -1606,8 +1621,10 @@ function recRenderCatalog(){
   }).join('');
 }
 function catDelete(barcode){
-  if(!confirm('Remover código do catálogo?'))return;
-  delete recKnown[barcode];localStorage.setItem('rec_known',JSON.stringify(recKnown));recRenderCatalog();toast('🗑️ Removido do catálogo');
+  if(!confirm('Remover código do catálogo? (some para todos)'))return;
+  delete recKnown[barcode];localStorage.setItem('rec_known',JSON.stringify(recKnown));
+  recDeleteCatalogItem(barcode);
+  recRenderCatalog();toast('🗑️ Removido do catálogo');
 }
 function catEdit(barcode){
   const data=recKnown[barcode];if(!data)return;
@@ -1782,6 +1799,7 @@ function ncConfirm(){
     const prev=recKnown[barcode]||{};
     recKnown[barcode]={products,since:prev.since||new Date().toLocaleDateString('pt-BR'),supplier:prev.supplier||recSession.fornecedor||''};
     localStorage.setItem('rec_known',JSON.stringify(recKnown));
+    recSaveCatalogItem(barcode);
     closeModal();recRenderCatalog();ncMode='new';toast('✏️ Catálogo atualizado');return;
   }
   if(ncMode==='nobc'){
@@ -1789,9 +1807,10 @@ function ncConfirm(){
     recAddCaixa(barcode,{products},{boxCount,noBarcode:true});
     return;
   }
-  // new — salva no catálogo e adiciona
+  // new — salva no catálogo (servidor) e adiciona
   recKnown[barcode]={products,since:(recKnown[barcode]&&recKnown[barcode].since)||new Date().toLocaleDateString('pt-BR'),supplier:recSession.fornecedor||''};
   localStorage.setItem('rec_known',JSON.stringify(recKnown));
+  recSaveCatalogItem(barcode);
   closeModal();
   recAddCaixa(barcode,{products},{boxCount});
 }
@@ -1841,28 +1860,87 @@ function recUpdatePersistCounter(){
   const bar=document.getElementById('rpcBar');
   if(bar){bar.style.width=pct+'%';bar.className='rpc-bar-fill'+(bipado>nf?' over':'');}
 }
-function recShowMemoriaFornecedor(){
-  const wrap=document.getElementById('recMemoriaFornecedor');
-  const list=document.getElementById('recMemoriaList');
-  const nomeEl=document.getElementById('recMemNome');
-  if(!wrap)return;
+// ─── BUSCA NO CATÁLOGO DE CAIXAS (nº / produto / código do fornecedor) ────────
+function recCatMatchItems(q){
+  const ql=(q||'').toLowerCase().trim();
   const forn=recSession.fornecedor;
-  if(!forn){wrap.style.display='none';return;}
-  const known=Object.entries(recKnown).filter(([,v])=>v.supplier===forn);
-  if(!known.length){wrap.style.display='none';return;}
-  if(nomeEl)nomeEl.textContent=forn;
-  list.innerHTML=known.map(([barcode,data])=>{
-    const prods=data.products.map(p=>`${p.name} ×${p.qty}`).join(', ');
-    const esc=barcode.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    return`<button class="rec-memory-btn" onclick="recMemoriaAdd('${esc}')">
-      <div><div>${prods}</div><div class="rec-memory-sub">${barcode.length>24?barcode.slice(0,24)+'…':barcode}</div></div>
-      <span class="rec-memory-add">＋</span></button>`;
-  }).join('');
-  wrap.style.display='block';
+  const entries=Object.entries(recKnown);
+  if(!ql){
+    const pref=entries.filter(([,v])=>v.supplier===forn);
+    return (pref.length?pref:entries).slice(0,8);
+  }
+  return entries.filter(([bc,v])=>{
+    if(bc.toLowerCase().includes(ql))return true;
+    return (v.products||[]).some(p=>(p.name||'').toLowerCase().includes(ql)||String(p.supplierCode||'').toLowerCase().includes(ql));
+  }).slice(0,15);
 }
-function recMemoriaAdd(barcode){
-  if(!recKnown[barcode]){toast('⚠️ Caixa não encontrada no catálogo');return;}
-  recAddCaixa(barcode,recKnown[barcode]);
+function recCatSearchInput(val){
+  const res=document.getElementById('recCatResults');if(!res)return;
+  const items=recCatMatchItems(val);
+  const forn=recSession.fornecedor;
+  if(!items.length){
+    res.innerHTML='<div class="rec-cat-empty">Nenhuma caixa salva encontrada.<br>Bipe ou digite o código para cadastrar uma nova.</div>';
+    res.classList.add('show');return;
+  }
+  const head=val?'Resultados':(forn?('Caixas frequentes — '+forn):'Caixas salvas');
+  res.innerHTML='<div class="rec-cat-head">'+head+'</div>'+items.map(([bc,v])=>{
+    const prods=(v.products||[]).map(p=>p.name+' ×'+p.qty).join(', ');
+    const code=(v.products||[]).map(p=>p.supplierCode).filter(Boolean)[0];
+    const esc=bc.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const sub=[bc.length>28?bc.slice(0,28)+'…':bc, code?('cód '+code):'', v.supplier].filter(Boolean).join(' · ');
+    return '<div class="rec-cat-item" onmousedown="recCatAdd(\''+esc+'\')"><div class="rc-info"><div class="rc-name">'+(prods||'(sem produtos)')+'</div><div class="rc-sub">'+sub+'</div></div><span class="rc-add">＋</span></div>';
+  }).join('');
+  res.classList.add('show');
+}
+function recCatAdd(barcode){
+  const it=recKnown[barcode];
+  if(!it){toast('⚠️ Caixa não encontrada');return;}
+  recAddCaixa(barcode,it);
+  const s=document.getElementById('recCatSearch');if(s)s.value='';
+  const r=document.getElementById('recCatResults');if(r)r.classList.remove('show');
+  recFocusScanner();
+}
+function recMemoriaAdd(barcode){recCatAdd(barcode);} // compat
+// atualiza só o placeholder com o fornecedor (chamado ao entrar na bipagem)
+function recShowMemoriaFornecedor(){
+  const s=document.getElementById('recCatSearch');
+  if(s)s.placeholder=recSession.fornecedor?('🔍 Buscar caixa da '+recSession.fornecedor+': nº, produto ou código'):'🔍 Buscar caixa salva: nº, produto ou código';
+}
+
+// ─── CATÁLOGO COMPARTILHADO NO SERVIDOR (Firebase) ───────────────────────────
+function recCatKey(barcode){return (String(barcode).replace(/[.#$\[\]\/]/g,'_').slice(0,180))||'_';}
+let _recCatListening=false;
+function recCatRebuild(snapVal){
+  const val=snapVal||{};const merged={};
+  Object.values(val).forEach(it=>{if(it&&it.barcode)merged[it.barcode]={products:it.products||[],supplier:it.supplier||'',since:it.since||''};});
+  // preserva itens locais ainda não sincronizados (ex: cadastrados offline)
+  Object.keys(recKnown).forEach(bc=>{if(!merged[bc])merged[bc]=recKnown[bc];});
+  recKnown=merged;localStorage.setItem('rec_known',JSON.stringify(recKnown));
+  recRenderCatalog();
+  const s=document.getElementById('recCatSearch');
+  if(s&&document.activeElement===s)recCatSearchInput(s.value);
+}
+function recLoadCatalog(){
+  ensureFirebase(()=>{
+    if(!db)return;
+    db.ref('catalogo').once('value',snap=>{
+      const val=snap.val()||{};
+      const inFb={};Object.values(val).forEach(it=>{if(it&&it.barcode)inFb[it.barcode]=1;});
+      const localBefore=Object.keys(recKnown);
+      recCatRebuild(val);
+      // migra catálogo antigo do celular para o servidor (uma vez)
+      localBefore.forEach(bc=>{if(!inFb[bc]&&recKnown[bc])recSaveCatalogItem(bc);});
+    },()=>{});
+    if(!_recCatListening){_recCatListening=true;db.ref('catalogo').on('value',snap=>recCatRebuild(snap.val()),()=>{});}
+  });
+}
+function recSaveCatalogItem(barcode){
+  const it=recKnown[barcode];if(!it)return;
+  const obj={barcode:barcode,products:it.products||[],supplier:it.supplier||'',since:it.since||''};
+  ensureFirebase(()=>{if(db){try{db.ref('catalogo/'+recCatKey(barcode)).set(obj);}catch(e){}}});
+}
+function recDeleteCatalogItem(barcode){
+  ensureFirebase(()=>{if(db){try{db.ref('catalogo/'+recCatKey(barcode)).remove();}catch(e){}}});
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
