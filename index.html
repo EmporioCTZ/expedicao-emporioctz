@@ -207,7 +207,20 @@ header .hfunc strong{display:block;font-size:12px;}
 .dash-stat{background:white;border-radius:14px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.06);text-align:center;}
 .dash-stat .ds-num{font-size:28px;font-weight:800;color:var(--brand);}
 .dash-stat .ds-lbl{font-size:11px;color:#888;margin-top:4px;}
-.dash-op-item{background:white;border-radius:12px;padding:14px;margin-bottom:8px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.dash-op-item{background:white;border-radius:12px;padding:14px;margin-bottom:8px;box-shadow:0 1px 4px rgba(0,0,0,.06);cursor:pointer;transition:background .15s;position:relative;}
+.dash-op-item:active{background:#f5f5fa;}
+.dash-op-item .dash-op-arrow{position:absolute;right:12px;top:12px;color:#ccc;font-size:18px;}
+/* DASHBOARD — modal de detalhes */
+#dashDetailModal{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:700;display:none;align-items:flex-end;justify-content:center;}
+#dashDetailModal.show{display:flex;}
+.dd-row{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #f0f0f0;font-size:13px;}
+.dd-row .k{color:#888;}.dd-row .v{font-weight:700;color:#1a1a2e;text-align:right;}
+.dd-section{font-size:11px;font-weight:800;color:#888;text-transform:uppercase;letter-spacing:.5px;margin:14px 0 8px;}
+.dd-item{display:flex;align-items:center;gap:10px;padding:8px 10px;background:#f7f7fa;border-radius:8px;margin-bottom:5px;}
+.dd-item .dd-num{font-size:10px;font-weight:800;color:#aaa;min-width:22px;flex-shrink:0;}
+.dd-item .dd-name{font-size:12px;font-weight:700;color:#1a1a2e;line-height:1.3;}
+.dd-item .dd-meta{font-size:11px;color:#999;margin-top:1px;word-break:break-all;}
+.dd-item .dd-qty{margin-left:auto;font-size:13px;font-weight:800;color:var(--brand);flex-shrink:0;}
 .dash-op-header{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
 .dash-op-type{font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px;}
 .dash-op-type.exp{background:#fff0eb;color:#ee4d2d;}
@@ -821,6 +834,18 @@ header .hfunc strong{display:block;font-size:12px;}
   </div>
 </div>
 
+<!-- MODAL DETALHE DASHBOARD -->
+<div id="dashDetailModal">
+  <div class="hist-modal-card">
+    <div class="hist-modal-head">
+      <h3 id="dashDetailTitle">Detalhes</h3>
+      <button class="hist-modal-close" onclick="document.getElementById('dashDetailModal').classList.remove('show')">✕</button>
+    </div>
+    <div class="hist-modal-sub" id="dashDetailSub"></div>
+    <div class="hist-modal-body" id="dashDetailBody"></div>
+  </div>
+</div>
+
 <div id="toast"></div>
 <script>
 // ═══════════════════════════════════════════════
@@ -1169,13 +1194,13 @@ function expAddDevolucao(rawCode){
   const ean=(rawCode||'').trim();
   if(!ean)return;
   const now=Date.now();
-  if(ean===expDevLast.ean&&now-expDevLast.time<900)return; // anti dupla-leitura da câmera
+  if(ean===expDevLast.ean&&now-expDevLast.time<1800)return; // evita a câmera somar sozinha; re-bipar intencional (>1,8s) soma +1
   expDevLast={ean,time:now};
   const exist=expPackages.find(p=>p.type==='dev'&&p.ean===ean);
   if(exist){
-    beepDuplicate();
-    expSetStatus('expScanStatus','duplicate','⚠️ '+(exist.name||ean)+' já na lista (qtd '+exist.qty+') — ajuste no +/−');
-    toast('⚠️ Já na lista (qtd '+exist.qty+') — toque na quantidade p/ ajustar');return;
+    exist.qty++;expSave();expRenderList();beepSuccess();if(navigator.vibrate)navigator.vibrate(60);
+    expSetStatus('expScanStatus','success','✅ +1 '+(exist.name||ean)+' = '+exist.qty);
+    toast('✅ '+(exist.name||ean)+' ×'+exist.qty);return;
   }
   const item={type:'dev',ean,name:'',supplier:'',supplierCode:'',sku:'',qty:1,mkt:'Devolução',time:new Date().toLocaleTimeString('pt-BR'),func:funcionario,olistId:''};
   expPackages.unshift(item);expSave();expRenderList();beepSuccess();if(navigator.vibrate)navigator.vibrate(80);
@@ -2203,8 +2228,8 @@ function dashRender(ops){
   if(!ops.length){list.innerHTML='';empty.style.display='block';document.getElementById('dashFuncStats').innerHTML='';return;}
   empty.style.display='none';
   list.innerHTML=ops.map(o=>{
-    if(o._type==='exp')return`<div class="dash-op-item"><div class="dash-op-header"><span class="dash-op-type exp">EXPEDIÇÃO</span><span class="dash-op-date">${o.data||''} ${o.hora||''}</span></div><div class="dash-op-info">📦 ${o.total||0} pacotes · ${o.motorista||'Sem motorista'}</div><div class="dash-op-sub">👤 ${o.funcionario||'—'} · 🚗 ${o.placa||'—'}</div><button class="dash-del-btn" onclick="dashDelete('${o._key}','expedicao')">🗑️ Excluir registro</button></div>`;
-    return`<div class="dash-op-item"><div class="dash-op-header"><span class="dash-op-type rec">RECEBIMENTO</span><span class="dash-op-date">${o.data||''} ${o.hora||''}</span></div><div class="dash-op-info">🏭 ${o.fornecedor||'—'} — NF ${o.nfNumero||'—'}</div><div class="dash-op-sub">👤 ${o.funcionario||'—'} · 📦 ${o.totalCaixas||0} caixas</div><button class="dash-del-btn" onclick="dashDelete('${o._key}','recebimento')">🗑️ Excluir registro</button></div>`;
+    if(o._type==='exp')return`<div class="dash-op-item" onclick="dashShowDetail('${o._key}')"><span class="dash-op-arrow">›</span><div class="dash-op-header"><span class="dash-op-type exp">EXPEDIÇÃO</span><span class="dash-op-date">${o.data||''} ${o.hora||''}</span></div><div class="dash-op-info">📦 ${o.total||0} itens · ${o.motorista||'Sem motorista'}</div><div class="dash-op-sub">👤 ${o.funcionario||'—'} · 🚗 ${o.placa||'—'}</div><button class="dash-del-btn" onclick="event.stopPropagation();dashDelete('${o._key}','expedicao')">🗑️ Excluir registro</button></div>`;
+    return`<div class="dash-op-item" onclick="dashShowDetail('${o._key}')"><span class="dash-op-arrow">›</span><div class="dash-op-header"><span class="dash-op-type rec">RECEBIMENTO</span><span class="dash-op-date">${o.data||''} ${o.hora||''}</span></div><div class="dash-op-info">🏭 ${o.fornecedor||'—'} — NF ${o.nfNumero||'—'}</div><div class="dash-op-sub">👤 ${o.funcionario||'—'} · 📦 ${o.totalCaixas||0} caixas</div><button class="dash-del-btn" onclick="event.stopPropagation();dashDelete('${o._key}','recebimento')">🗑️ Excluir registro</button></div>`;
   }).join('');
   dashRenderFuncStats(ops);
 }
@@ -2221,6 +2246,45 @@ function dashRenderFuncStats(ops){
   if(!names.length){el.innerHTML='';return;}
   el.innerHTML=`<div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin:16px 0 10px">Por Funcionário</div>`+
     names.map(f=>{const s=byFunc[f];return`<div style="background:white;border-radius:12px;padding:12px 14px;margin-bottom:8px;box-shadow:0 1px 4px rgba(0,0,0,.06)"><div style="font-size:14px;font-weight:700;margin-bottom:8px">👤 ${f}</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center"><div><div style="font-size:18px;font-weight:800;color:var(--brand)">${s.exp}</div><div style="font-size:10px;color:#888">Expedições</div></div><div><div style="font-size:18px;font-weight:800;color:#2e7d32">${s.pkgs}</div><div style="font-size:10px;color:#888">Pacotes</div></div><div><div style="font-size:18px;font-weight:800;color:#1565c0">${s.rec}</div><div style="font-size:10px;color:#888">Recebimentos</div></div></div></div>`;}).join('');
+}
+function ddRow(k,v){return '<div class="dd-row"><span class="k">'+k+'</span><span class="v">'+v+'</span></div>';}
+function dashShowDetail(key){
+  const o=dashOpsAll.find(x=>x._key===key);if(!o)return;
+  const title=document.getElementById('dashDetailTitle');
+  const sub=document.getElementById('dashDetailSub');
+  const body=document.getElementById('dashDetailBody');
+  sub.textContent=(o.data||'')+' '+(o.hora||'')+' · 👤 '+(o.funcionario||'—');
+  let h='';
+  if(o._type==='exp'){
+    title.textContent='🚚 Expedição';
+    h+=ddRow('Motorista',o.motorista||'—');
+    h+=ddRow('Transportadora',o.transportadora||'—');
+    h+=ddRow('Placa',o.placa||'—');
+    h+=ddRow('Total',(o.total||0)+' itens');
+    if(o.shopeeFullCode)h+=ddRow('Envio Full Shopee',o.shopeeFullCode);
+    if(o.byMkt&&Object.keys(o.byMkt).length){h+='<div class="dd-section">Por marketplace</div>';Object.entries(o.byMkt).forEach(([m,n])=>{h+=ddRow(m,n);});}
+    const pac=o.pacotes||[];
+    h+='<div class="dd-section">Itens ('+pac.length+')</div>';
+    if(!pac.length)h+='<div class="dd-item"><div class="dd-name" style="color:#aaa">Lista não disponível (registro antigo)</div></div>';
+    h+=pac.map((p,i)=>{
+      if(p.type==='dev')return '<div class="dd-item"><span class="dd-num">'+(i+1)+'</span><div class="dd-info"><div class="dd-name">↩️ '+(p.name||p.ean)+'</div><div class="dd-meta">'+(p.supplier?p.supplier+' · ':'')+'EAN '+(p.ean||'')+'</div></div><span class="dd-qty">×'+(p.qty||1)+'</span></div>';
+      return '<div class="dd-item"><span class="dd-num">'+(i+1)+'</span><div class="dd-info"><div class="dd-name">'+(p.code||'')+'</div><div class="dd-meta">'+(p.mkt||'')+' · '+(p.time||'')+'</div></div></div>';
+    }).join('');
+  }else{
+    title.textContent='📥 Recebimento';
+    h+=ddRow('Fornecedor',o.fornecedor||'—');
+    h+=ddRow('Nota Fiscal',o.nfNumero||'—');
+    h+=ddRow('Volumes',(o.totalCaixas||0)+' / '+(o.nfVolumes||0));
+    const prod=o.produtos||{};const ns=Object.keys(prod);
+    const totUn=ns.reduce((s,n)=>s+((prod[n]&&prod[n].units)||0),0);
+    h+=ddRow('Produtos distintos',ns.length);
+    h+=ddRow('Unidades totais',totUn);
+    h+='<div class="dd-section">Produtos ('+ns.length+')</div>';
+    if(!ns.length)h+='<div class="dd-item"><div class="dd-name" style="color:#aaa">Sem produtos registrados</div></div>';
+    h+=ns.map(n=>'<div class="dd-item"><div class="dd-info" style="flex:1"><div class="dd-name">'+n+'</div><div class="dd-meta">'+((prod[n]&&prod[n].boxes)||0)+' cx.</div></div><span class="dd-qty">'+((prod[n]&&prod[n].units)||0)+' un.</span></div>').join('');
+  }
+  body.innerHTML=h;
+  document.getElementById('dashDetailModal').classList.add('show');
 }
 function dashDelete(key,path){
   if(!confirm('Excluir este registro permanentemente?\nEsta ação não pode ser desfeita.'))return;
