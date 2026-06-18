@@ -319,6 +319,27 @@ header .hfunc strong{display:block;font-size:12px;}
 /* SECONDARY BACK */
 .rec-sec-back{padding:0 0 12px;}
 .rec-sec-back button{background:none;border:none;color:var(--brand);font-weight:700;font-size:14px;cursor:pointer;padding:4px 0;display:flex;align-items:center;gap:4px;}
+/* MODAL — BLOCO DE PRODUTO (busca Olist por linha) */
+.nc-prod-block{border:1.5px solid #ececf5;border-radius:12px;padding:12px;margin-bottom:10px;background:#fafaff;}
+.nc-prod-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.nc-prod-head .nc-prod-num{font-size:11px;font-weight:800;color:var(--brand);text-transform:uppercase;letter-spacing:.5px;}
+.nc-prod-head .nc-prod-rm{background:none;border:none;color:#e57373;font-size:18px;cursor:pointer;padding:0 2px;line-height:1;}
+.nc-row-search{position:relative;margin-bottom:8px;}
+.nc-row-search input{width:100%;padding:9px 12px;border:1.5px solid #e0e0e0;border-radius:9px;font-size:13px;outline:none;background:white;}
+.nc-row-search input:focus{border-color:var(--brand);}
+/* MULTIPLICADOR DE CAIXAS (passo 4) */
+.nc-boxcount{display:flex;align-items:center;gap:10px;background:#fff8e1;border:1.5px solid #ffe082;border-radius:12px;padding:11px 13px;margin-top:6px;}
+.nc-boxcount label{flex:1;font-size:13px;font-weight:700;color:#e65100;line-height:1.3;}
+.nc-boxcount input{width:74px;padding:9px;border:1.5px solid #ffb300;border-radius:9px;font-size:16px;font-weight:800;text-align:center;outline:none;background:white;color:#e65100;}
+.nc-boxcount-hint{font-size:11px;color:#bf8a00;margin-top:5px;text-align:center;font-weight:600;}
+/* BOTÃO CAIXA SEM CÓDIGO */
+.rec-nobc-btn{display:block;width:100%;max-width:420px;margin:0 auto 10px;padding:12px;border:2px dashed #b0b0c8;border-radius:12px;background:#f7f7fc;color:#555;font-size:14px;font-weight:700;cursor:pointer;}
+.rec-nobc-btn:active{background:#eeeef6;}
+/* BADGE MULTIPLICADOR NA LISTA DE CAIXAS */
+.caixa-mult-badge{background:#fff3e0;color:#e65100;font-size:10px;font-weight:800;padding:2px 7px;border-radius:6px;flex-shrink:0;}
+.caixa-nobc-badge{background:#ede7f6;color:#5e35b1;font-size:10px;font-weight:800;padding:2px 7px;border-radius:6px;flex-shrink:0;}
+.caixa-edit{background:none;border:none;font-size:15px;color:#90a4ae;cursor:pointer;padding:4px;flex-shrink:0;}
+.caixa-edit:active{color:var(--brand);}
 </style>
 </head>
 <body>
@@ -550,6 +571,7 @@ header .hfunc strong{display:block;font-size:12px;}
     <div id="recScanStatus" class="scan-status waiting">📷 Use o scanner externo ou inicie a câmera</div>
     <button class="btn btn-primary" id="recBtnCamera" onclick="recToggleScanner()">▶️ Iniciar Câmera</button>
     <button class="btn btn-secondary" onclick="recManualEntry()">⌨️ Digitar manualmente</button>
+    <button class="rec-nobc-btn" onclick="recCaixaSemCodigo()">🏷️ Caixa sem código de barras</button>
     <div style="margin-top:16px">
       <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Últimas caixas</div>
       <div id="recCaixaList"></div>
@@ -695,21 +717,20 @@ header .hfunc strong{display:block;font-size:12px;}
 <!-- MODAL NOVA CAIXA -->
 <div id="modalNovaCaixa">
   <div class="nc-card">
-    <h3>📦 Nova caixa — informe o produto</h3>
+    <h3 id="ncTitle">📦 Nova caixa — informe o produto</h3>
     <div class="nc-barcode" id="ncBarcode"></div>
     <div id="ncOlistStatus" style="display:none"></div>
-    <div class="nc-olist-search" id="ncOlistSearchWrap">
-      <input type="text" id="ncOlistSearch" placeholder="🔍 Buscar produto no Olist por nome..." autocomplete="off" autocorrect="off" oninput="ncOlistSearchInput(this.value)" onblur="setTimeout(()=>document.getElementById('ncOlistResults').classList.remove('show'),200)"/>
-      <div id="ncOlistResults" class="nc-olist-results"></div>
-    </div>
     <div class="nc-multi-row">
       <input type="checkbox" id="ncMulti" onchange="ncToggleMulti()">
       <label for="ncMulti">Caixa com múltiplos produtos diferentes</label>
     </div>
     <div id="ncProdInputs">
-      <div class="prod-input-labels"><span>Nome do Produto</span><span>Qtd/caixa</span></div>
       <div id="ncRows"></div>
       <button class="btn btn-secondary" id="ncAddBtn" onclick="ncAddRow()" style="display:none;max-width:180px;padding:9px;font-size:13px;margin-top:4px">+ Produto</button>
+    </div>
+    <div class="nc-boxcount" id="ncBoxCountWrap">
+      <label>📦 Quantas caixas iguais a esta?<div class="nc-boxcount-hint" id="ncBoxCountHint" style="text-align:left;margin-top:3px">Bipe 1, registre várias (ex: pallet)</div></label>
+      <input type="number" id="ncBoxCount" value="1" min="1" inputmode="numeric" oninput="ncUpdateBoxCountHint()"/>
     </div>
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-secondary" onclick="ncCancel()" style="flex:1;margin:0">Cancelar</button>
@@ -1230,7 +1251,7 @@ let recKnown=JSON.parse(localStorage.getItem('rec_known')||'{}');
 let recVerification={};
 let recScanMode='barcode',recQrCode=null;
 let recLastBarcode='',recLastTime=0;
-let ncPendingBarcode='',ncRowCount=1;
+let ncPendingBarcode='';
 
 // Scanner externo BT recebimento
 (function(){
@@ -1295,7 +1316,7 @@ function recReset(){
     hist.push({data:new Date().toLocaleDateString('pt-BR'),hora:new Date().toLocaleTimeString('pt-BR'),fornecedor:recSession.fornecedor,nfNumero:recSession.nfNumero,nfVolumes:recSession.nfVolumes,totalCaixas:recSession.caixas.length,func:funcionario,produtos:totals});
     if(hist.length>20)hist.shift();
     localStorage.setItem('rec_history',JSON.stringify(hist));
-    fbSave('recebimento',{data:new Date().toLocaleDateString('pt-BR'),hora:new Date().toLocaleTimeString('pt-BR'),funcionario,fornecedor:recSession.fornecedor,nfNumero:recSession.nfNumero,nfVolumes:recSession.nfVolumes,totalCaixas:recSession.caixas.length,produtos:totals});
+    fbSave('recebimento',{data:new Date().toLocaleDateString('pt-BR'),hora:new Date().toLocaleTimeString('pt-BR'),funcionario,fornecedor:recSession.fornecedor,nfNumero:recSession.nfNumero,nfVolumes:recSession.nfVolumes,totalCaixas:recVolCount(),produtos:totals});
   }
   recSession={fornecedor:'',nfNumero:'',nfVolumes:0,caixas:[],started:false};
   recVerification={};recSaveSession();
@@ -1312,7 +1333,7 @@ function recFinalizar(){
   const now=new Date();
   const totals=recGetProductTotals();
   const names=Object.keys(totals);
-  const bipado=recSession.caixas.length,nf=recSession.nfVolumes;
+  const bipado=recVolCount(),nf=recSession.nfVolumes;
   const volOk=bipado===nf;
   const allOk=volOk&&names.every(n=>recVerification[n]?.status==='ok');
   if(!recFinalized){
@@ -1320,7 +1341,7 @@ function recFinalizar(){
     hist.push({data:now.toLocaleDateString('pt-BR'),hora:now.toLocaleTimeString('pt-BR'),fornecedor:recSession.fornecedor,nfNumero:recSession.nfNumero,nfVolumes:recSession.nfVolumes,totalCaixas:recSession.caixas.length,func:funcionario,produtos:totals});
     if(hist.length>20)hist.shift();
     localStorage.setItem('rec_history',JSON.stringify(hist));
-    fbSave('recebimento',{data:now.toLocaleDateString('pt-BR'),hora:now.toLocaleTimeString('pt-BR'),funcionario,fornecedor:recSession.fornecedor,nfNumero:recSession.nfNumero,nfVolumes:recSession.nfVolumes,totalCaixas:recSession.caixas.length,produtos:totals});
+    fbSave('recebimento',{data:now.toLocaleDateString('pt-BR'),hora:now.toLocaleTimeString('pt-BR'),funcionario,fornecedor:recSession.fornecedor,nfNumero:recSession.nfNumero,nfVolumes:recSession.nfVolumes,totalCaixas:recVolCount(),produtos:totals});
     recFinalized=true;
   }
   const unidTotal=names.reduce((s,n)=>s+totals[n].units,0);
@@ -1403,17 +1424,29 @@ function recProcessScan(rawCode){
   if(recKnown[code]){recAddCaixa(code,recKnown[code]);}
   else{recShowNovaCaixaModal(code);}
 }
-function recAddCaixa(barcode,knownData){
-  recSession.caixas.push({barcode,products:knownData.products,time:new Date().toLocaleTimeString('pt-BR'),func:funcionario});
+// Total de VOLUMES físicos (considera caixas multiplicadas — passo 4)
+function recVolCount(){return recSession.caixas.reduce((s,c)=>s+(c.boxCount||1),0);}
+function recAddCaixa(barcode,knownData,opts){
+  opts=opts||{};
+  const boxCount=Math.max(1,opts.boxCount||1);
+  recSession.caixas.push({
+    barcode,
+    products:knownData.products.map(p=>({name:p.name,qty:p.qty})), // cópia — nunca mutar o template do catálogo
+    time:new Date().toLocaleTimeString('pt-BR'),
+    func:funcionario,
+    boxCount,
+    noBarcode:!!opts.noBarcode
+  });
   recSaveSession();recUpdateScannerUI();recRenderCaixaList();
   if(navigator.vibrate)navigator.vibrate(80);
   const names=knownData.products.map(p=>p.name).join(', ');
-  recSetScanStatus('success','✅ Caixa #'+recSession.caixas.length+' — '+names.slice(0,30));
-  toast('✅ Caixa #'+recSession.caixas.length+' adicionada');
+  const volMsg=boxCount>1?(' (+'+boxCount+' vol)'):'';
+  recSetScanStatus('success','✅ '+names.slice(0,28)+volMsg);
+  toast(boxCount>1?('✅ '+boxCount+' volumes adicionados'):'✅ Caixa adicionada');
   setTimeout(()=>{const el=document.getElementById('recScanStatus');if(el.classList.contains('success'))recSetScanStatus('waiting','📷 Próxima caixa...');},2000);
 }
 function recUpdateScannerUI(){
-  const bipado=recSession.caixas.length,nf=recSession.nfVolumes,diff=bipado-nf;
+  const bipado=recVolCount(),nf=recSession.nfVolumes,diff=bipado-nf;
   document.getElementById('recVolBipado').textContent=bipado;
   document.getElementById('recVolNF').textContent=nf||'—';
   const diffEl=document.getElementById('recVolDiff');
@@ -1428,25 +1461,25 @@ function recRenderCaixaList(){
   const list=document.getElementById('recCaixaList');
   const shown=recSession.caixas.slice().reverse().slice(0,8);
   list.innerHTML=shown.map((c,i)=>{
+    const realIdx=recSession.caixas.length-1-i;
     const num=recSession.caixas.length-i;
     const tags=c.products.map(p=>`<span class="caixa-prod-tag">${p.name} ×${p.qty}</span>`).join('');
-    return`<div class="caixa-item"><div class="caixa-top"><span class="caixa-num">#${num}</span><span class="caixa-barcode">${c.barcode}</span><span class="caixa-time">${c.time}</span><button class="pkg-del" title="Remover caixa" onclick="recRemoveCaixa('${c.barcode.replace(/'/g,"\\'")}',${recSession.caixas.length-1-i})">✕</button></div><div class="caixa-products">${tags}</div></div>`;
+    const multBadge=(c.boxCount&&c.boxCount>1)?`<span class="caixa-mult-badge">×${c.boxCount} vol</span>`:'';
+    const nobcBadge=c.noBarcode?`<span class="caixa-nobc-badge">s/ código</span>`:'';
+    return`<div class="caixa-item"><div class="caixa-top"><span class="caixa-num">#${num}</span>${multBadge}${nobcBadge}<span class="caixa-barcode">${c.barcode}</span><button class="caixa-edit" title="Editar esta caixa" onclick="recEditCaixa(${realIdx})">✏️</button><button class="pkg-del" title="Remover caixa" onclick="recRemoveCaixaIdx(${realIdx})">✕</button></div><div class="caixa-products">${tags}</div></div>`;
   }).join('');
 }
-function recRemoveCaixa(barcode,idx){
-  if(!confirm('Remover caixa #'+(idx+1)+'?'))return;
-  if(recSession.caixas[idx]&&recSession.caixas[idx].barcode===barcode){
-    recSession.caixas.splice(idx,1);
-  } else {
-    for(let i=recSession.caixas.length-1;i>=0;i--){if(recSession.caixas[i].barcode===barcode){recSession.caixas.splice(i,1);break;}}
-  }
+function recRemoveCaixaIdx(idx){
+  if(!recSession.caixas[idx])return;
+  if(!confirm('Remover esta caixa?'))return;
+  recSession.caixas.splice(idx,1);
   recSaveSession();recUpdateScannerUI();recRenderCaixaList();
   toast('🗑️ Caixa removida');
 }
 function recRenderAll(){recUpdateScannerUI();recRenderCaixaList();recRenderProdutos();recRenderConferencia();}
 function recGetProductTotals(){
   const totals={};
-  recSession.caixas.forEach(c=>c.products.forEach(p=>{if(!totals[p.name])totals[p.name]={units:0,boxes:0};totals[p.name].units+=p.qty;totals[p.name].boxes+=1;}));
+  recSession.caixas.forEach(c=>{const mult=c.boxCount||1;c.products.forEach(p=>{if(!totals[p.name])totals[p.name]={units:0,boxes:0};totals[p.name].units+=p.qty*mult;totals[p.name].boxes+=mult;});});
   return totals;
 }
 function recRenderProdutos(){
@@ -1460,7 +1493,7 @@ function recRenderProdutos(){
 }
 function recRenderConferencia(){
   const totals=recGetProductTotals(),names=Object.keys(totals);
-  const bipado=recSession.caixas.length,nf=recSession.nfVolumes;
+  const bipado=recVolCount(),nf=recSession.nfVolumes;
   const volOk=bipado===nf,pct=nf?Math.min(100,Math.round(bipado/nf*100)):0;
   document.getElementById('recConfVolCard').innerHTML=`<div style="font-size:13px;font-weight:700;color:#555;margin-bottom:10px">📦 Volumes</div><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:6px"><span>Bipados: <b>${bipado}</b></span><span>NF: <b>${nf||'—'}</b></span></div><div style="background:#e0e0e0;border-radius:8px;height:16px;overflow:hidden"><div style="height:100%;border-radius:8px;width:${pct}%;background:${bipado>nf?'linear-gradient(90deg,#c62828,#ef9a9a)':'linear-gradient(90deg,#2e7d32,#66bb6a)'}"></div></div><div style="margin-top:8px"><span class="vol-status-badge ${!nf?'pend':volOk?'ok':'err'}">${!nf?'⏳ Sessão não iniciada':volOk?'✅ Volumes conferidos!':bipado>nf?`⚠️ Excesso: +${bipado-nf}`:`❌ Faltam ${nf-bipado}`}</span></div>`;
   const listEl=document.getElementById('recConfProdList'),actEl=document.getElementById('recConfActions'),emptyEl=document.getElementById('recConfEmpty');
@@ -1485,7 +1518,7 @@ function recGerarPDF(){
   doc.setFontSize(9);doc.setFont('helvetica','normal');
   const now=new Date();doc.text(`Empório CTZ · ${now.toLocaleDateString('pt-BR')} às ${now.toLocaleTimeString('pt-BR')}`,pw/2,22,{align:'center'});
   doc.setTextColor(0,0,0);
-  doc.autoTable({startY:y,theme:'grid',headStyles:{fillColor:[26,26,46],textColor:255,fontSize:9},bodyStyles:{fontSize:9},columnStyles:{0:{fontStyle:'bold',cellWidth:55}},body:[['Fornecedor',recSession.fornecedor],['Nota Fiscal',recSession.nfNumero],['Volumes NF',recSession.nfVolumes+' volumes'],['Volumes Bipados',recSession.caixas.length+' volumes'],['Status Volumes',recSession.caixas.length===recSession.nfVolumes?'✅ Conferido':'⚠️ Divergência'],['Funcionário',funcionario]],margin:{left:m,right:m}});
+  doc.autoTable({startY:y,theme:'grid',headStyles:{fillColor:[26,26,46],textColor:255,fontSize:9},bodyStyles:{fontSize:9},columnStyles:{0:{fontStyle:'bold',cellWidth:55}},body:[['Fornecedor',recSession.fornecedor],['Nota Fiscal',recSession.nfNumero],['Volumes NF',recSession.nfVolumes+' volumes'],['Volumes Bipados',recVolCount()+' volumes'],['Status Volumes',recVolCount()===recSession.nfVolumes?'✅ Conferido':'⚠️ Divergência'],['Funcionário',funcionario]],margin:{left:m,right:m}});
   y=doc.lastAutoTable.finalY+8;
   const prodBody=names.map(name=>{const t=totals[name],v=recVerification[name]||{};const diff=v.expected>0?t.units-v.expected:null;return[name,String(t.units),v.expected||'—',diff===null?'—':diff===0?'✅ OK':diff>0?'+'+diff:String(diff),v.status==='ok'?'✅ OK':v.status==='err'?'❌ Falta '+v.missing:'—'];});
   doc.autoTable({startY:y,theme:'striped',headStyles:{fillColor:[26,26,46],textColor:255,fontSize:8},bodyStyles:{fontSize:8},head:[['Produto','Bipado','Esperado','Dif.','Status']],body:prodBody,margin:{left:m,right:m}});
@@ -1505,7 +1538,7 @@ function recExportExcel(){
 }
 async function recEnviarWhatsApp(){
   const totals=recGetProductTotals(),names=Object.keys(totals);
-  const bipado=recSession.caixas.length,nf=recSession.nfVolumes;
+  const bipado=recVolCount(),nf=recSession.nfVolumes;
   const now=new Date(),volOk=bipado===nf;
   const prodLines=names.map(name=>{const t=totals[name],v=recVerification[name]||{};if(v.status==='ok')return`✅ ${name} — ${t.units} un. OK`;if(v.status==='err')return`❌ ${name} — ${t.units} bipadas${v.missing?' / FALTAM '+v.missing+' un.':''}`;return`📦 ${name} — ${t.units} unidades`;}).join('\n');
   const allOk=volOk&&names.every(n=>recVerification[n]?.status==='ok');
@@ -1534,17 +1567,7 @@ function catDelete(barcode){
 }
 function catEdit(barcode){
   const data=recKnown[barcode];if(!data)return;
-  ncPendingBarcode=barcode;
-  ncOlistReset();
-  document.getElementById('ncOlistSearchWrap').style.display='none';
-  document.getElementById('ncBarcode').textContent=barcode;
-  document.getElementById('ncMulti').checked=data.products.length>1;
-  const rows=document.getElementById('ncRows');rows.innerHTML='';
-  data.products.forEach((p,i)=>{rows.appendChild(ncCreateRow(i));document.getElementById('ncName_'+i).value=p.name;document.getElementById('ncQty_'+i).value=p.qty;});
-  ncRowCount=data.products.length;
-  document.getElementById('ncAddBtn').style.display=data.products.length>1?'block':'none';
-  document.getElementById('modalNovaCaixa').classList.add('show');
-  setTimeout(()=>{const inp=document.querySelector('#ncRows .prod-input-row input');if(inp)inp.focus();},200);
+  ncOpenModal({mode:'catalog',barcode,products:data.products});
 }
 
 // HISTÓRICO RECEBIMENTO
@@ -1556,8 +1579,9 @@ function recRenderHistory(){
   list.innerHTML=hist.slice().reverse().map(h=>`<div class="hist-item"><div class="hist-header"><span class="hist-badge">RECEBIMENTO</span><span class="hist-date">${h.data}</span></div><div class="hist-info">🏭 ${h.fornecedor} — NF ${h.nfNumero}</div><div class="hist-sub">📦 ${h.totalCaixas} caixas · Funcionário: ${h.func||'—'} · ${h.hora}</div></div>`).join('');
 }
 
-// OLIST — busca por EAN e por nome
+// OLIST — busca por EAN e por nome (busca independente por linha de produto)
 const OLIST_API='/api/olist/produto';
+let ncMode='new',ncEditIdx=-1; // modos: new | nobc | edit | catalog
 async function ncLookupEAN(ean){
   const el=document.getElementById('ncOlistStatus');
   el.className='nc-olist-status loading';el.textContent='🔍 Buscando no Olist...';el.style.display='block';
@@ -1569,7 +1593,7 @@ async function ncLookupEAN(ean){
       const p=data.produtos[0];
       el.className='nc-olist-status found';
       el.textContent='✅ '+p.nome+(p.sku?' · SKU: '+p.sku:'');
-      const inp=document.getElementById('ncName_0');
+      const inp=document.querySelector('#ncRows .nc-name');
       if(inp&&!inp.value)inp.value=p.nome;
     } else {
       el.className='nc-olist-status notfound';
@@ -1578,8 +1602,10 @@ async function ncLookupEAN(ean){
   }catch(e){el.style.display='none';}
 }
 let _ncSearchTimer;
-function ncOlistSearchInput(val){
-  const res=document.getElementById('ncOlistResults');
+function ncRowSearch(inputEl){
+  const block=inputEl.closest('.nc-prod-block');
+  const res=block.querySelector('.nc-olist-results');
+  const val=inputEl.value;
   clearTimeout(_ncSearchTimer);
   if(!val||val.length<2){res.classList.remove('show');return;}
   _ncSearchTimer=setTimeout(async()=>{
@@ -1587,59 +1613,143 @@ function ncOlistSearchInput(val){
       const resp=await fetch(OLIST_API+'?q='+encodeURIComponent(val));
       if(!resp.ok)throw new Error();
       const data=await resp.json();
-      if(!data.produtos||!data.produtos.length){res.classList.remove('show');return;}
-      res.innerHTML=data.produtos.slice(0,10).map(p=>`<div class="nc-olist-result-item" onmousedown="ncSelectOlistProduct('${p.nome.replace(/'/g,"\\'")}')"><div class="r-nome">${p.nome}</div><div class="r-sku">SKU: ${p.sku||'—'} · EAN: ${p.ean||'—'}</div></div>`).join('');
+      if(!data.produtos||!data.produtos.length){res.innerHTML='<div class="nc-olist-result-item" style="color:#aaa">Nenhum produto encontrado</div>';res.classList.add('show');return;}
+      res.innerHTML=data.produtos.slice(0,10).map(p=>`<div class="nc-olist-result-item" onmousedown="ncSelectRowProduct(this,'${p.nome.replace(/'/g,"\\'")}')"><div class="r-nome">${p.nome}</div><div class="r-sku">SKU: ${p.sku||'—'} · EAN: ${p.ean||'—'}</div></div>`).join('');
       res.classList.add('show');
     }catch(e){}
   },400);
 }
-function ncSelectOlistProduct(nome){
-  const inp=document.getElementById('ncName_0');
-  if(inp)inp.value=nome;
-  document.getElementById('ncOlistResults').classList.remove('show');
-  document.getElementById('ncOlistSearch').value='';
-  setTimeout(()=>{const q=document.getElementById('ncQty_0');if(q)q.focus();},50);
+function ncSelectRowProduct(itemEl,nome){
+  const block=itemEl.closest('.nc-prod-block');
+  block.querySelector('.nc-name').value=nome;
+  block.querySelector('.nc-olist-results').classList.remove('show');
+  block.querySelector('.nc-search').value='';
+  const q=block.querySelector('.nc-qty');setTimeout(()=>{if(q)q.focus();},50);
   toast('✅ '+nome);
 }
-function ncOlistReset(){
-  const s=document.getElementById('ncOlistStatus');if(s){s.style.display='none';}
-  const r=document.getElementById('ncOlistResults');if(r)r.classList.remove('show');
-  const i=document.getElementById('ncOlistSearch');if(i)i.value='';
+function ncBlurResults(inputEl){
+  const block=inputEl.closest('.nc-prod-block');
+  setTimeout(()=>{const r=block.querySelector('.nc-olist-results');if(r)r.classList.remove('show');},200);
 }
-
-// MODAL NOVA CAIXA
-function recShowNovaCaixaModal(barcode){
-  if(recScannerActive)recStopScanner();
-  ncPendingBarcode=barcode;ncRowCount=1;
-  document.getElementById('ncBarcode').textContent=barcode;
-  document.getElementById('ncMulti').checked=false;ncToggleMulti();
-  ncOlistReset();
-  document.getElementById('ncOlistSearchWrap').style.display='block';
-  document.getElementById('modalNovaCaixa').classList.add('show');
-  ncLookupEAN(barcode);
-  setTimeout(()=>{const inp=document.querySelector('#ncRows .prod-input-row input');if(inp)inp.focus();},300);
+function ncOlistReset(){const s=document.getElementById('ncOlistStatus');if(s)s.style.display='none';}
+function ncCreateRow(){
+  const div=document.createElement('div');div.className='nc-prod-block';
+  div.innerHTML=`<div class="nc-prod-head"><span class="nc-prod-num">Produto</span><button class="nc-prod-rm" onclick="ncRemoveRow(this)">✕</button></div>
+    <div class="nc-row-search"><input type="text" class="nc-search" placeholder="🔍 Buscar no Olist por nome..." autocomplete="off" autocorrect="off" oninput="ncRowSearch(this)" onblur="ncBlurResults(this)"><div class="nc-olist-results"></div></div>
+    <div class="prod-input-labels"><span>Nome do Produto</span><span>Qtd/caixa</span></div>
+    <div class="prod-input-row"><input type="text" class="nc-name" placeholder="Nome do produto"><input type="number" class="nc-qty" placeholder="Qtd" inputmode="numeric" min="1"></div>`;
+  return div;
+}
+function ncRenumber(){
+  const blocks=document.querySelectorAll('#ncRows .nc-prod-block');
+  const multi=document.getElementById('ncMulti').checked;
+  blocks.forEach((b,i)=>{
+    b.querySelector('.nc-prod-num').textContent=multi?('Produto '+(i+1)):'Produto';
+    const rm=b.querySelector('.nc-prod-rm');
+    rm.style.display=(multi&&blocks.length>1)?'block':'none';
+  });
 }
 function ncToggleMulti(){
   const multi=document.getElementById('ncMulti').checked;
-  const rows=document.getElementById('ncRows'),addBtn=document.getElementById('ncAddBtn');
-  rows.innerHTML='';ncRowCount=1;rows.appendChild(ncCreateRow(0));
-  addBtn.style.display=multi?'block':'none';
+  const rows=document.getElementById('ncRows');
+  if(multi){
+    document.getElementById('ncAddBtn').style.display='block';
+  }else{
+    const blocks=rows.querySelectorAll('.nc-prod-block');
+    for(let i=blocks.length-1;i>=1;i--)blocks[i].remove();
+    document.getElementById('ncAddBtn').style.display='none';
+  }
+  ncRenumber();
 }
-function ncCreateRow(idx){
-  const div=document.createElement('div');div.className='prod-input-row';div.id='ncRow_'+idx;
-  div.innerHTML=`<input type="text" placeholder="Nome do produto" id="ncName_${idx}"><input type="number" placeholder="Qtd" id="ncQty_${idx}" inputmode="numeric" min="1">`;
-  return div;
+function ncAddRow(){
+  const rows=document.getElementById('ncRows');
+  if(rows.querySelectorAll('.nc-prod-block').length>=8){toast('Máximo 8 produtos');return;}
+  rows.appendChild(ncCreateRow());ncRenumber();
+  const inps=rows.querySelectorAll('.nc-prod-block .nc-search');inps[inps.length-1].focus();
 }
-function ncAddRow(){if(ncRowCount>=5){toast('Máximo 5 produtos');return;}document.getElementById('ncRows').appendChild(ncCreateRow(ncRowCount));ncRowCount++;}
-function ncCancel(){document.getElementById('modalNovaCaixa').classList.remove('show');ncPendingBarcode='';toast('Bipagem cancelada');}
+function ncRemoveRow(btn){
+  const rows=document.getElementById('ncRows');
+  if(rows.querySelectorAll('.nc-prod-block').length<=1){toast('Pelo menos 1 produto');return;}
+  btn.closest('.nc-prod-block').remove();ncRenumber();
+}
+function ncUpdateBoxCountHint(){
+  const n=parseInt(document.getElementById('ncBoxCount').value)||1;
+  const hint=document.getElementById('ncBoxCountHint');
+  if(n>1)hint.innerHTML='✅ Vai registrar <b>'+n+' volumes</b> de uma vez';
+  else hint.textContent='Bipe 1, registre várias (ex: pallet)';
+}
+function ncCancel(){document.getElementById('modalNovaCaixa').classList.remove('show');ncPendingBarcode='';ncMode='new';ncEditIdx=-1;toast('Cancelado');}
+
+// Abre o modal em qualquer modo (new/nobc/edit/catalog)
+function ncOpenModal(opts){
+  if(recScannerActive)recStopScanner();
+  ncMode=opts.mode;ncEditIdx=(opts.editIdx==null?-1:opts.editIdx);ncPendingBarcode=opts.barcode||'';
+  const titleEl=document.getElementById('ncTitle');
+  titleEl.textContent=opts.mode==='edit'?'✏️ Editar esta caixa bipada':opts.mode==='nobc'?'🏷️ Caixa sem código':opts.mode==='catalog'?'✏️ Editar caixa do catálogo':'📦 Nova caixa — informe o produto';
+  document.getElementById('ncBarcode').textContent=opts.barcode||'';
+  const products=(opts.products&&opts.products.length)?opts.products:[{name:'',qty:''}];
+  const multi=products.length>1;
+  document.getElementById('ncMulti').checked=multi;
+  const rows=document.getElementById('ncRows');rows.innerHTML='';
+  products.forEach(p=>{const r=ncCreateRow();rows.appendChild(r);r.querySelector('.nc-name').value=p.name||'';const qv=(p.qty!=null&&p.qty!=='')?p.qty:'';r.querySelector('.nc-qty').value=qv;});
+  document.getElementById('ncAddBtn').style.display=multi?'block':'none';
+  ncRenumber();
+  const bc=document.getElementById('ncBoxCount');bc.value=opts.boxCount||1;ncUpdateBoxCountHint();
+  document.getElementById('ncBoxCountWrap').style.display=(opts.mode==='catalog')?'none':'flex';
+  ncOlistReset();
+  document.getElementById('modalNovaCaixa').classList.add('show');
+  setTimeout(()=>{const inp=document.querySelector('#ncRows .nc-name');if(inp&&!inp.value)inp.focus();},300);
+}
+// MODAL NOVA CAIXA — código bipado desconhecido
+function recShowNovaCaixaModal(barcode){
+  ncOpenModal({mode:'new',barcode});
+  ncLookupEAN(barcode);
+}
+// Caixa sem código de barras (passo 3) — não vai pro catálogo
+function recCaixaSemCodigo(){
+  if(!recSession.started){toast('⚠️ Inicie um recebimento primeiro');return;}
+  const existing=recSession.caixas.filter(c=>c.noBarcode).length;
+  ncOpenModal({mode:'nobc',barcode:'Caixa sem Código '+(existing+1)});
+}
+// Editar uma caixa específica já bipada (passo 2) — não altera o catálogo
+function recEditCaixa(idx){
+  const c=recSession.caixas[idx];if(!c)return;
+  ncOpenModal({mode:'edit',editIdx:idx,barcode:c.barcode,products:c.products,boxCount:c.boxCount||1});
+}
 function ncConfirm(){
   const products=[];
-  for(let i=0;i<ncRowCount;i++){const n=document.getElementById('ncName_'+i),q=document.getElementById('ncQty_'+i);if(!n||!q)continue;const name=n.value.trim(),qty=parseInt(q.value)||0;if(name&&qty>0)products.push({name,qty});}
+  document.querySelectorAll('#ncRows .nc-prod-block').forEach(b=>{
+    const name=b.querySelector('.nc-name').value.trim();
+    const qty=parseInt(b.querySelector('.nc-qty').value)||0;
+    if(name&&qty>0)products.push({name,qty});
+  });
   if(!products.length){toast('⚠️ Informe produto e quantidade');return;}
+  const boxCount=Math.max(1,parseInt(document.getElementById('ncBoxCount').value)||1);
   const barcode=ncPendingBarcode;
-  recKnown[barcode]={products,since:(recKnown[barcode]&&recKnown[barcode].since)||new Date().toLocaleDateString('pt-BR'),supplier:recSession.fornecedor||''};localStorage.setItem('rec_known',JSON.stringify(recKnown));
-  document.getElementById('modalNovaCaixa').classList.remove('show');
-  recAddCaixa(barcode,{products});
+  const closeModal=()=>document.getElementById('modalNovaCaixa').classList.remove('show');
+
+  if(ncMode==='edit'){
+    const c=recSession.caixas[ncEditIdx];
+    if(c){c.products=products;c.boxCount=boxCount;}
+    recSaveSession();recUpdateScannerUI();recRenderCaixaList();
+    closeModal();ncMode='new';ncEditIdx=-1;toast('✏️ Caixa atualizada');return;
+  }
+  if(ncMode==='catalog'){
+    const prev=recKnown[barcode]||{};
+    recKnown[barcode]={products,since:prev.since||new Date().toLocaleDateString('pt-BR'),supplier:prev.supplier||recSession.fornecedor||''};
+    localStorage.setItem('rec_known',JSON.stringify(recKnown));
+    closeModal();recRenderCatalog();ncMode='new';toast('✏️ Catálogo atualizado');return;
+  }
+  if(ncMode==='nobc'){
+    closeModal();
+    recAddCaixa(barcode,{products},{boxCount,noBarcode:true});
+    return;
+  }
+  // new — salva no catálogo e adiciona
+  recKnown[barcode]={products,since:(recKnown[barcode]&&recKnown[barcode].since)||new Date().toLocaleDateString('pt-BR'),supplier:recSession.fornecedor||''};
+  localStorage.setItem('rec_known',JSON.stringify(recKnown));
+  closeModal();
+  recAddCaixa(barcode,{products},{boxCount});
 }
 
 // ─── WIZARD ──────────────────────────────────────────────────────────────────
@@ -1675,7 +1785,7 @@ function recHandleBack(){
   else{recGoToStep(recCurrentStep-1);}
 }
 function recUpdatePersistCounter(){
-  const bipado=recSession.caixas.length,nf=recSession.nfVolumes;
+  const bipado=recVolCount(),nf=recSession.nfVolumes;
   const counter=document.getElementById('recPersistCounter');
   if(!counter)return;
   if(!recSession.started||!nf){counter.classList.remove('show');return;}
