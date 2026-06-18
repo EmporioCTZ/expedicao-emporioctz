@@ -353,6 +353,18 @@ header .hfunc strong{display:block;font-size:12px;}
 .conf-alert.err .ca-title{color:#c62828;}
 .conf-alert.ok .ca-title{color:#2e7d32;}
 .conf-alert .ca-row{font-size:13px;color:#b71c1c;padding:2px 0;}
+/* POPUP ADICIONAR — caixa ou unitário */
+#recAddModal{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:998;display:none;align-items:flex-end;justify-content:center;}
+#recAddModal.show{display:flex;}
+.rec-add-card{background:white;border-radius:20px 20px 0 0;padding:22px;width:100%;max-width:480px;}
+.rec-add-card h3{font-size:16px;font-weight:800;margin-bottom:10px;}
+.ra-prod-list{background:#f5f5f5;border-radius:10px;padding:10px 12px;font-size:13px;font-weight:700;color:#333;margin-bottom:14px;line-height:1.5;}
+.ra-type-toggle{display:flex;gap:8px;margin-bottom:14px;}
+.ra-type-btn{flex:1;padding:11px;border:2px solid #e0e0e0;border-radius:10px;background:white;font-size:13px;font-weight:700;color:#888;cursor:pointer;}
+.ra-type-btn.selected{border-color:var(--brand);background:var(--brand);color:white;}
+.ra-qty-row label{display:block;font-size:12px;font-weight:700;color:#555;margin-bottom:6px;}
+.ra-qty-row input{width:100%;padding:12px;border:2px solid #e0e0e0;border-radius:10px;font-size:22px;font-weight:800;text-align:center;outline:none;}
+.ra-hint{font-size:12px;color:var(--brand);text-align:center;font-weight:700;min-height:18px;margin-top:8px;}
 /* SECONDARY BACK */
 .rec-sec-back{padding:0 0 12px;}
 .rec-sec-back button{background:none;border:none;color:var(--brand);font-weight:700;font-size:14px;cursor:pointer;padding:4px 0;display:flex;align-items:center;gap:4px;}
@@ -724,6 +736,27 @@ header .hfunc strong{display:block;font-size:12px;}
     <button class="btn btn-excel" onclick="expExportExcel()">📊 Exportar Excel (CSV)</button>
     <button class="fin-back" onclick="expVoltarCorrigir()">↩️ Voltar para corrigir</button>
     <button class="btn btn-danger" onclick="expNovaColeta()" style="margin-top:4px">🔄 Nova Coleta</button>
+  </div>
+</div>
+
+<!-- POPUP ADICIONAR (caixa ou unitário) -->
+<div id="recAddModal">
+  <div class="rec-add-card">
+    <h3 id="raTitle">Adicionar ao recebimento</h3>
+    <div id="raProducts" class="ra-prod-list"></div>
+    <div class="ra-type-toggle" id="raTypeToggle">
+      <button class="ra-type-btn selected" id="raBtnCaixa" onclick="raSetType('caixa')">📦 Caixa fechada</button>
+      <button class="ra-type-btn" id="raBtnUnit" onclick="raSetType('unit')">🔢 Unitário</button>
+    </div>
+    <div class="ra-qty-row">
+      <label id="raQtyLabel">Quantas caixas iguais?</label>
+      <input type="number" id="raQty" value="1" min="1" inputmode="numeric" oninput="raUpdateHint()"/>
+    </div>
+    <div class="ra-hint" id="raHint"></div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-secondary" onclick="raClose()" style="flex:1;margin:0">Cancelar</button>
+      <button class="btn btn-primary" onclick="raConfirm()" style="flex:2;margin:0">✅ Adicionar</button>
+    </div>
   </div>
 </div>
 
@@ -1522,7 +1555,7 @@ function recAddCaixa(barcode,knownData,opts){
   const boxCount=Math.max(1,opts.boxCount||1);
   recSession.caixas.push({
     barcode,
-    products:knownData.products.map(p=>({name:p.name,qty:p.qty})), // cópia — nunca mutar o template do catálogo
+    products:knownData.products.map(p=>({...p})), // cópia — nunca mutar o template do catálogo
     time:new Date().toLocaleTimeString('pt-BR'),
     func:funcionario,
     boxCount,
@@ -1733,18 +1766,26 @@ function ncRowSearch(inputEl){
       if(!resp.ok)throw new Error();
       const data=await resp.json();
       if(!data.produtos||!data.produtos.length){res.innerHTML='<div class="nc-olist-result-item" style="color:#aaa">Nenhum produto encontrado</div>';res.classList.add('show');return;}
-      res.innerHTML=data.produtos.slice(0,10).map(p=>`<div class="nc-olist-result-item" onmousedown="ncSelectRowProduct(this,'${p.nome.replace(/'/g,"\\'")}')"><div class="r-nome">${p.nome}</div><div class="r-sku">SKU: ${p.sku||'—'} · EAN: ${p.ean||'—'}</div></div>`).join('');
+      res.innerHTML=data.produtos.slice(0,10).map(p=>`<div class="nc-olist-result-item" onmousedown="ncSelectRowProduct(this,'${p.nome.replace(/'/g,"\\'")}','${p.id||''}')"><div class="r-nome">${p.nome}</div><div class="r-sku">SKU: ${p.sku||'—'} · EAN: ${p.ean||'—'}</div></div>`).join('');
       res.classList.add('show');
     }catch(e){}
   },400);
 }
-function ncSelectRowProduct(itemEl,nome){
+function ncSelectRowProduct(itemEl,nome,olistId){
   const block=itemEl.closest('.nc-prod-block');
   block.querySelector('.nc-name').value=nome;
+  block.dataset.olistId=olistId||'';
+  block.dataset.supCode='';
   block.querySelector('.nc-olist-results').classList.remove('show');
   block.querySelector('.nc-search').value='';
   const q=block.querySelector('.nc-qty');setTimeout(()=>{if(q)q.focus();},50);
   toast('✅ '+nome);
+  // busca o código do fornecedor em segundo plano (para permitir busca por código depois)
+  if(olistId){
+    fetch('/api/olist/codigo-fornecedor/'+encodeURIComponent(olistId)).then(r=>r.json()).then(d=>{
+      if(d&&d.codigo){block.dataset.supCode=d.codigo;const lbl=block.querySelector('.nc-supcode');if(lbl)lbl.textContent='cód. fornecedor: '+d.codigo;}
+    }).catch(()=>{});
+  }
 }
 function ncBlurResults(inputEl){
   const block=inputEl.closest('.nc-prod-block');
@@ -1756,7 +1797,8 @@ function ncCreateRow(){
   div.innerHTML=`<div class="nc-prod-head"><span class="nc-prod-num">Produto</span><button class="nc-prod-rm" onclick="ncRemoveRow(this)">✕</button></div>
     <div class="nc-row-search"><input type="text" class="nc-search" placeholder="🔍 Buscar no Olist por nome..." autocomplete="off" autocorrect="off" oninput="ncRowSearch(this)" onblur="ncBlurResults(this)"><div class="nc-olist-results"></div></div>
     <div class="prod-input-labels"><span>Nome do Produto</span><span>Qtd/caixa</span></div>
-    <div class="prod-input-row"><input type="text" class="nc-name" placeholder="Nome do produto"><input type="number" class="nc-qty" placeholder="Qtd" inputmode="numeric" min="1"></div>`;
+    <div class="prod-input-row"><input type="text" class="nc-name" placeholder="Nome do produto"><input type="number" class="nc-qty" placeholder="Qtd" inputmode="numeric" min="1"></div>
+    <div class="nc-supcode" style="font-size:11px;color:#2e7d32;font-weight:700;margin-top:3px;min-height:14px"></div>`;
   return div;
 }
 function ncRenumber(){
@@ -1810,7 +1852,7 @@ function ncOpenModal(opts){
   const multi=products.length>1;
   document.getElementById('ncMulti').checked=multi;
   const rows=document.getElementById('ncRows');rows.innerHTML='';
-  products.forEach(p=>{const r=ncCreateRow();rows.appendChild(r);r.querySelector('.nc-name').value=p.name||'';const qv=(p.qty!=null&&p.qty!=='')?p.qty:'';r.querySelector('.nc-qty').value=qv;});
+  products.forEach(p=>{const r=ncCreateRow();rows.appendChild(r);r.querySelector('.nc-name').value=p.name||'';const qv=(p.qty!=null&&p.qty!=='')?p.qty:'';r.querySelector('.nc-qty').value=qv;if(p.olistId)r.dataset.olistId=p.olistId;if(p.supplierCode){r.dataset.supCode=p.supplierCode;r.querySelector('.nc-supcode').textContent='cód. fornecedor: '+p.supplierCode;}});
   document.getElementById('ncAddBtn').style.display=multi?'block':'none';
   ncRenumber();
   const bc=document.getElementById('ncBoxCount');bc.value=opts.boxCount||1;ncUpdateBoxCountHint();
@@ -1840,7 +1882,12 @@ function ncConfirm(){
   document.querySelectorAll('#ncRows .nc-prod-block').forEach(b=>{
     const name=b.querySelector('.nc-name').value.trim();
     const qty=parseInt(b.querySelector('.nc-qty').value)||0;
-    if(name&&qty>0)products.push({name,qty});
+    if(name&&qty>0){
+      const prod={name,qty};
+      if(b.dataset.olistId)prod.olistId=b.dataset.olistId;
+      if(b.dataset.supCode)prod.supplierCode=b.dataset.supCode;
+      products.push(prod);
+    }
   });
   if(!products.length){toast('⚠️ Informe produto e quantidade');return;}
   const boxCount=Math.max(1,parseInt(document.getElementById('ncBoxCount').value)||1);
@@ -1950,13 +1997,50 @@ function recCatSearchInput(val){
   }).join('');
   res.classList.add('show');
 }
+// Abre o popup caixa/unitário ao escolher uma caixa na busca
+let raBarcode='',raType='caixa';
 function recCatAdd(barcode){
   const it=recKnown[barcode];
   if(!it){toast('⚠️ Caixa não encontrada');return;}
-  recAddCaixa(barcode,it);
+  raBarcode=barcode;
+  const single=(it.products||[]).length===1;
+  document.getElementById('raProducts').innerHTML=(it.products||[]).map(p=>'• '+p.name+' ×'+p.qty).join('<br>');
+  document.getElementById('raTypeToggle').style.display=single?'flex':'none';
+  document.getElementById('raQty').value=1;
+  raSetType('caixa');
   const s=document.getElementById('recCatSearch');if(s)s.value='';
   const r=document.getElementById('recCatResults');if(r)r.classList.remove('show');
-  recFocusScanner();
+  document.getElementById('recAddModal').classList.add('show');
+}
+function raSetType(t){
+  raType=t;
+  document.getElementById('raBtnCaixa').classList.toggle('selected',t==='caixa');
+  document.getElementById('raBtnUnit').classList.toggle('selected',t==='unit');
+  document.getElementById('raQtyLabel').textContent=t==='caixa'?'Quantas caixas iguais?':'Quantas unidades avulsas?';
+  raUpdateHint();
+}
+function raUpdateHint(){
+  const it=recKnown[raBarcode];if(!it)return;
+  const n=Math.max(1,parseInt(document.getElementById('raQty').value)||1);
+  const hint=document.getElementById('raHint');
+  if(raType==='caixa'){
+    const perBox=(it.products||[]).reduce((s,p)=>s+(p.qty||0),0);
+    hint.textContent='= '+n+' volume(s) · '+(perBox*n)+' unidade(s) no total';
+  }else{
+    hint.textContent='= '+n+' volume(s) · '+n+' unidade(s) (1 por volume)';
+  }
+}
+function raClose(){document.getElementById('recAddModal').classList.remove('show');raBarcode='';setTimeout(recFocusScanner,200);}
+function raConfirm(){
+  const it=recKnown[raBarcode];if(!it){raClose();return;}
+  const n=Math.max(1,parseInt(document.getElementById('raQty').value)||1);
+  if(raType==='unit'){
+    const p=(it.products||[])[0]||{name:'Item',qty:1};
+    recAddCaixa(raBarcode,{products:[{name:p.name,qty:1,supplierCode:p.supplierCode,olistId:p.olistId}]},{boxCount:n});
+  }else{
+    recAddCaixa(raBarcode,it,{boxCount:n});
+  }
+  raClose();
 }
 function recMemoriaAdd(barcode){recCatAdd(barcode);} // compat
 // atualiza só o placeholder com o fornecedor (chamado ao entrar na bipagem)
