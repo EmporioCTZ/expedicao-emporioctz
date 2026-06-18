@@ -134,6 +134,11 @@ header .hfunc strong{display:block;font-size:12px;}
 .pkg-del:active{color:var(--red);}
 .empty-state{text-align:center;padding:40px 24px;color:#bbb;}
 .empty-state .icon{font-size:52px;margin-bottom:12px;}
+/* DEVOLUÇÃO — controles de quantidade na lista */
+.dev-qty{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.dev-qty button{width:30px;height:30px;border:1.5px solid #ddd;background:white;border-radius:8px;font-size:18px;font-weight:800;color:var(--brand);cursor:pointer;line-height:1;padding:0;}
+.dev-qty button:active{background:#f0f2f5;}
+.dev-qty b{min-width:30px;text-align:center;font-size:17px;font-weight:800;color:var(--brand);cursor:pointer;}
 /* HISTORY */
 .hist-item{background:white;border-radius:12px;padding:14px;margin-bottom:8px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
 .hist-header{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
@@ -1067,6 +1072,11 @@ function expSelectMkt(btn){
     document.querySelectorAll('#expedicaoModule .scan-mode-btn').forEach(b=>b.classList.remove('selected'));
     document.getElementById('expModeQR').classList.add('selected');
     fcc.style.display='none';expClearFullCode();
+  } else if(expSelectedMkt==='Devolução'){
+    bar.classList.remove('disabled-mode');fcc.style.display='none';expClearFullCode();
+    expScanMode='barcode';
+    document.querySelectorAll('#expedicaoModule .scan-mode-btn').forEach(b=>b.classList.remove('selected'));
+    document.getElementById('expModeBar').classList.add('selected');
   } else {
     bar.classList.remove('disabled-mode');
     fcc.style.display='none';expClearFullCode();
@@ -1119,6 +1129,8 @@ function expCleanCode(raw){
 }
 function expAddPackage(rawCode){
   const code=expCleanCode(rawCode);
+  // Devolução = fluxo por PRODUTO (puxa Olist, soma quantidade, fornecedor)
+  if(expSelectedMkt==='Devolução'){expAddDevolucao(code);return;}
   const now=Date.now();
   if(code===expLastAdded.code&&now-expLastAdded.time<2500)return;
   expLastAdded={code,time:now};
@@ -1151,6 +1163,37 @@ function expRemovePackage(code){
   if(!confirm('Remover?'))return;
   expPackages=expPackages.filter(p=>p.code!==code);expSave();expRenderList();toast('🗑️ Removido');
 }
+// ─── DEVOLUÇÃO por produto (Olist) ───────────────────────────────────────────
+let expDevLast={ean:'',time:0};
+function expAddDevolucao(rawCode){
+  const ean=(rawCode||'').trim();
+  if(!ean)return;
+  const now=Date.now();
+  if(ean===expDevLast.ean&&now-expDevLast.time<900)return; // anti dupla-leitura da câmera
+  expDevLast={ean,time:now};
+  const exist=expPackages.find(p=>p.type==='dev'&&p.ean===ean);
+  if(exist){
+    beepDuplicate();
+    expSetStatus('expScanStatus','duplicate','⚠️ '+(exist.name||ean)+' já na lista (qtd '+exist.qty+') — ajuste no +/−');
+    toast('⚠️ Já na lista (qtd '+exist.qty+') — toque na quantidade p/ ajustar');return;
+  }
+  const item={type:'dev',ean,name:'',supplier:'',supplierCode:'',sku:'',qty:1,mkt:'Devolução',time:new Date().toLocaleTimeString('pt-BR'),func:funcionario,olistId:''};
+  expPackages.unshift(item);expSave();expRenderList();beepSuccess();if(navigator.vibrate)navigator.vibrate(80);
+  expSetStatus('expScanStatus','success','🔍 Buscando '+ean+' no Olist...');
+  fetch('/api/olist/produto?ean='+encodeURIComponent(ean)).then(r=>r.json()).then(d=>{
+    const p=(d.produtos||[])[0];
+    if(p){
+      item.name=p.nome;item.olistId=p.id;item.sku=p.sku||'';expSave();expRenderList();
+      expSetStatus('expScanStatus','success','✅ '+p.nome.slice(0,32));
+      fetch('/api/olist/codigo-fornecedor/'+encodeURIComponent(p.id)).then(r=>r.json()).then(f=>{item.supplier=f.fornecedor||'';item.supplierCode=f.codigo||'';expSave();expRenderList();}).catch(()=>{});
+    }else{item.name='⚠️ Não encontrado no Olist';expSave();expRenderList();}
+  }).catch(()=>{item.name='⚠️ Erro na busca';expSave();expRenderList();});
+}
+function expDevQty(ean,delta){const it=expPackages.find(p=>p.type==='dev'&&p.ean===ean);if(!it)return;it.qty=Math.max(1,it.qty+delta);expSave();expRenderList();}
+function expDevSetQty(ean){const it=expPackages.find(p=>p.type==='dev'&&p.ean===ean);if(!it)return;const v=prompt('Quantidade de "'+(it.name||ean)+'":',it.qty);if(v===null)return;const n=parseInt(v);if(n>0){it.qty=n;expSave();expRenderList();}}
+function expRemoveDev(ean){if(!confirm('Remover este produto da devolução?'))return;expPackages=expPackages.filter(p=>!(p.type==='dev'&&p.ean===ean));expSave();expRenderList();toast('🗑️ Removido');}
+// rótulo do item para relatórios (devolução mostra nome ×qtd; pacote mostra código)
+function expItemLabel(p){return p.type==='dev'?((p.name||p.ean)+' ×'+p.qty):p.code;}
 function expClearAll(){
   if(!confirm('Apagar TODOS os '+expPackages.length+' pacotes?'))return;
   expPackages=[];expSave();expRenderList();sessionStart=Date.now();toast('🗑️ Limpo');
@@ -1162,15 +1205,24 @@ function expApplyFilter(chip){
 }
 function expRenderList(){
   const list=document.getElementById('expPkgList'),empty=document.getElementById('expEmpty'),btn=document.getElementById('expBtnClear');
-  document.getElementById('expTotal').textContent=expPackages.length;
-  document.getElementById('expDev').textContent=expPackages.filter(p=>p.mkt==='Devolução').length;
+  const devUnits=expPackages.filter(p=>p.type==='dev').reduce((s,p)=>s+(p.qty||0),0);
+  const pkgCount=expPackages.filter(p=>p.type!=='dev').length;
+  document.getElementById('expTotal').textContent=pkgCount;
+  document.getElementById('expDev').textContent=devUnits;
   document.getElementById('expMkts').textContent=new Set(expPackages.map(p=>p.mkt)).size;
   const tab=document.querySelectorAll('#expedicaoModule .tab-bar button')[1];
   if(tab)tab.textContent=expPackages.length?`📋 Lista (${expPackages.length})`:'📋 Lista';
   const filtered=expFilter==='Todos'?expPackages:expPackages.filter(p=>p.mkt===expFilter);
   if(!expPackages.length){list.innerHTML='';empty.style.display='block';btn.style.display='none';return;}
   empty.style.display='none';btn.style.display='block';
-  list.innerHTML=filtered.map(p=>{const c=MKT_COLORS[p.mkt]||MKT_COLORS['Outros'];return`<div class="pkg-item"><span class="pkg-badge" style="background:${c.bg};color:${c.color}">${p.mkt}</span><div class="pkg-info"><div class="pkg-code">${p.code}</div><div class="pkg-meta">${p.time} · ${p.func||'—'}</div></div><button class="pkg-del" onclick="expRemovePackage('${p.code.replace(/'/g,"\\'")}')">✕</button></div>`;}).join('');
+  list.innerHTML=filtered.map(p=>{
+    const c=MKT_COLORS[p.mkt]||MKT_COLORS['Outros'];
+    if(p.type==='dev'){
+      const eesc=(p.ean||'').replace(/'/g,"\\'");
+      const meta=(p.supplier?('🏭 '+p.supplier+' · '):'')+'EAN '+p.ean;
+      return`<div class="pkg-item"><span class="pkg-badge" style="background:${c.bg};color:${c.color}">↩️ Devol.</span><div class="pkg-info"><div class="pkg-code">${p.name||'(buscando...)'}</div><div class="pkg-meta">${meta}</div></div><div class="dev-qty"><button onclick="expDevQty('${eesc}',-1)">−</button><b onclick="expDevSetQty('${eesc}')" title="Tocar para digitar">${p.qty}</b><button onclick="expDevQty('${eesc}',1)">+</button></div><button class="pkg-del" onclick="expRemoveDev('${eesc}')">✕</button></div>`;
+    }
+    return`<div class="pkg-item"><span class="pkg-badge" style="background:${c.bg};color:${c.color}">${p.mkt}</span><div class="pkg-info"><div class="pkg-code">${p.code}</div><div class="pkg-meta">${p.time} · ${p.func||'—'}</div></div><button class="pkg-del" onclick="expRemovePackage('${p.code.replace(/'/g,"\\'")}')">✕</button></div>`;}).join('');
 }
 function expRenderHistory(){
   const hist=JSON.parse(localStorage.getItem('exp_history')||'[]');
@@ -1209,8 +1261,9 @@ function clearSignature(){const c=document.getElementById('signatureCanvas');c.g
 
 function expDados(){
   const now=new Date(),byMkt={};
-  expPackages.forEach(p=>{byMkt[p.mkt]=(byMkt[p.mkt]||0)+1;});
-  return{data:now.toLocaleDateString('pt-BR'),hora:now.toLocaleTimeString('pt-BR'),motorista:document.getElementById('driverName').value.trim(),transportadora:document.getElementById('driverTransp').value.trim(),placa:document.getElementById('driverPlate').value.trim().toUpperCase(),funcionario,total:expPackages.length,byMkt,pacotes:expPackages,sigData:document.getElementById('signatureCanvas').toDataURL(),shopeeFullCode:expFullCode||''};
+  expPackages.forEach(p=>{const n=p.type==='dev'?(p.qty||1):1;byMkt[p.mkt]=(byMkt[p.mkt]||0)+n;});
+  const total=expPackages.reduce((s,p)=>s+(p.type==='dev'?(p.qty||1):1),0);
+  return{data:now.toLocaleDateString('pt-BR'),hora:now.toLocaleTimeString('pt-BR'),motorista:document.getElementById('driverName').value.trim(),transportadora:document.getElementById('driverTransp').value.trim(),placa:document.getElementById('driverPlate').value.trim().toUpperCase(),funcionario,total,byMkt,pacotes:expPackages,sigData:document.getElementById('signatureCanvas').toDataURL(),shopeeFullCode:expFullCode||''};
 }
 function expValidar(){
   if(!expPackages.length){toast('⚠️ Nenhum pacote!');return false;}
@@ -1228,7 +1281,7 @@ function gerarPDF(){
   if(!expValidar())return;
   const d=expDados();
   const byMktRows=Object.entries(d.byMkt).map(([m,n])=>`<tr><td>${m}</td><td><b>${n}</b></td></tr>`).join('');
-  const pkgRows=d.pacotes.map((p,i)=>`<tr><td>${String(i+1).padStart(3,'0')}</td><td>${p.mkt}</td><td style="font-family:monospace;font-size:11px">${p.code}</td><td>${p.time}</td><td>${p.func||'—'}</td></tr>`).join('');
+  const pkgRows=d.pacotes.map((p,i)=>`<tr><td>${String(i+1).padStart(3,'0')}</td><td>${p.mkt}</td><td style="font-family:monospace;font-size:11px">${p.type==='dev'?((p.name||p.ean)+' ×'+p.qty+(p.supplier?(' · '+p.supplier):'')):p.code}</td><td>${p.time}</td><td>${p.func||'—'}</td></tr>`).join('');
   const logoHtml=LOGO_URL?`<img src="${LOGO_URL}" style="height:56px;object-fit:contain">`:`<div style="background:#1a1a2e;color:#e8b84b;padding:8px 18px;border-radius:8px;font-size:13px;font-weight:900">📦 EMPÓRIO CTZ</div>`;
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Comprovante</title><style>@page{margin:18mm 14mm}body{font-family:Arial,sans-serif;font-size:12px;color:#1a1a2e}.hdr{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #1a1a2e;padding-bottom:12px;margin-bottom:14px}.hdr-r{text-align:right;font-size:11px;color:#555}.hdr-r .t{font-size:18px;font-weight:900;color:#1a1a2e;display:block}table{width:100%;border-collapse:collapse;margin:10px 0}td,th{padding:6px 9px;border:1px solid #ddd;font-size:11px}th{background:#1a1a2e;color:white;text-align:left}tr:nth-child(even)td{background:#fafafa}h3{font-size:11px;font-weight:700;color:#555;text-transform:uppercase;margin:14px 0 6px;border-bottom:1px solid #eee;padding-bottom:3px}.sig{border:1.5px solid #ddd;padding:12px;margin-top:16px;border-radius:8px;text-align:center}.sig img{max-width:340px;height:120px;object-fit:contain;border-bottom:1.5px solid #333;display:block;margin:0 auto 6px}.foot{margin-top:18px;border-top:1px solid #eee;padding-top:8px;font-size:10px;color:#aaa;text-align:center}@media print{body{margin:0}}</style></head><body><div class="hdr"><div>${logoHtml}</div><div class="hdr-r"><span class="t">Comprovante de Coleta</span>Empório CTZ · ${d.data} às ${d.hora}</div></div><table><tr><td width="42%"><b>Motorista</b></td><td>${d.motorista}</td></tr><tr><td><b>Transportadora</b></td><td>${d.transportadora||'—'}</td></tr><tr><td><b>Placa</b></td><td>${d.placa||'—'}</td></tr><tr><td><b>Funcionário</b></td><td>${d.funcionario}</td></tr><tr><td><b>Total de Pacotes</b></td><td><b>${d.total}</b></td></tr>${d.shopeeFullCode?`<tr><td><b>Envio Full Shopee</b></td><td style="font-family:monospace">${d.shopeeFullCode}</td></tr>`:''}</table><h3>Por Marketplace</h3><table><thead><tr><th>Marketplace</th><th>Qtd.</th></tr></thead><tbody>${byMktRows}</tbody></table><h3>Lista de Pacotes</h3><table><thead><tr><th>#</th><th>Marketplace</th><th>Código</th><th>Hora</th><th>Funcionário</th></tr></thead><tbody>${pkgRows}</tbody></table><div class="sig"><p style="font-weight:700;margin-bottom:8px">Assinatura — Recebi os ${d.total} pacotes acima</p><img src="${d.sigData}" alt="Assinatura"><p style="font-weight:700">${d.motorista}</p></div><div class="foot">Gerado por Expedição Empório CTZ · ${d.data} às ${d.hora} · Funcionário: ${d.funcionario}</div></body></html>`;
   const w=window.open('','_blank');w.document.write(html);w.document.close();w.onload=()=>{w.focus();w.print();};
@@ -1237,7 +1290,7 @@ function gerarPDF(){
 function expExportExcel(){
   if(!expPackages.length){toast('⚠️ Nenhum pacote!');return;}
   const d=expDados();
-  const rows=[['#','Código','Marketplace','Hora','Funcionário'],...expPackages.map((p,i)=>[i+1,p.code,p.mkt,p.time,p.func||'—'])];
+  const rows=[['#','Código / Produto','Marketplace','Qtd','Fornecedor','Hora','Funcionário'],...expPackages.map((p,i)=>[i+1,p.type==='dev'?(p.name||p.ean):p.code,p.mkt,p.type==='dev'?(p.qty||1):1,p.type==='dev'?(p.supplier||''):'',p.time,p.func||'—'])];
   const csv='﻿'+rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
   const url=URL.createObjectURL(blob);
@@ -1249,7 +1302,7 @@ function enviarEmail(){
   const d=expDados();
   const subject=encodeURIComponent(`Comprovante Coleta — ${d.data} — ${d.total} pacotes`);
   const byMktText=Object.entries(d.byMkt).map(([m,n])=>`  ${m}: ${n}`).join('\n');
-  const body=encodeURIComponent(`Comprovante de Coleta — Empório CTZ\n===================================\nData: ${d.data} às ${d.hora}\nMotorista: ${d.motorista}\nTransportadora: ${d.transportadora||'—'}\nPlaca: ${d.placa||'—'}\nFuncionário: ${d.funcionario}\nTotal: ${d.total} pacote(s)${d.shopeeFullCode?'\nEnvio Full Shopee: '+d.shopeeFullCode:''}\n\nPor Marketplace:\n${byMktText}\n\nLista:\n${d.pacotes.map((p,i)=>`${String(i+1).padStart(3,'0')}. [${p.mkt}] ${p.code} — ${p.time}`).join('\n')}`);
+  const body=encodeURIComponent(`Comprovante de Coleta — Empório CTZ\n===================================\nData: ${d.data} às ${d.hora}\nMotorista: ${d.motorista}\nTransportadora: ${d.transportadora||'—'}\nPlaca: ${d.placa||'—'}\nFuncionário: ${d.funcionario}\nTotal: ${d.total} pacote(s)${d.shopeeFullCode?'\nEnvio Full Shopee: '+d.shopeeFullCode:''}\n\nPor Marketplace:\n${byMktText}\n\nLista:\n${d.pacotes.map((p,i)=>`${String(i+1).padStart(3,'0')}. [${p.mkt}] ${expItemLabel(p)}${p.type==='dev'&&p.supplier?(' — '+p.supplier):(' — '+p.time)}`).join('\n')}`);
   window.open(`mailto:${EMAIL_DESTINO}?subject=${subject}&body=${body}`);
   toast('✉️ Email aberto');
 }
@@ -1265,7 +1318,7 @@ async function expGerarBlob(){
   y=doc.lastAutoTable.finalY+8;
   doc.autoTable({startY:y,theme:'striped',headStyles:{fillColor:[26,26,46],textColor:255,fontSize:9},bodyStyles:{fontSize:9},head:[['Marketplace','Qtd.']],body:Object.entries(d.byMkt).map(([k,v])=>[k,String(v)]),margin:{left:m,right:m}});
   y=doc.lastAutoTable.finalY+8;
-  doc.autoTable({startY:y,theme:'striped',headStyles:{fillColor:[26,26,46],textColor:255,fontSize:8},bodyStyles:{fontSize:7.5},head:[['#','Marketplace','Código','Hora','Funcionário']],body:d.pacotes.map((p,i)=>[String(i+1).padStart(3,'0'),p.mkt,p.code,p.time,p.func||'—']),margin:{left:m,right:m},columnStyles:{2:{font:'courier',fontSize:7}}});
+  doc.autoTable({startY:y,theme:'striped',headStyles:{fillColor:[26,26,46],textColor:255,fontSize:8},bodyStyles:{fontSize:7.5},head:[['#','Marketplace','Código / Produto','Hora','Funcionário']],body:d.pacotes.map((p,i)=>[String(i+1).padStart(3,'0'),p.mkt,p.type==='dev'?((p.name||p.ean)+' ×'+p.qty+(p.supplier?(' · '+p.supplier):'')):p.code,p.time,p.func||'—']),margin:{left:m,right:m},columnStyles:{2:{font:'courier',fontSize:7}}});
   y=doc.lastAutoTable.finalY+10;
   if(y>220){doc.addPage();y=20;}
   doc.setDrawColor(180);doc.rect(m,y,pw-m*2,42);
