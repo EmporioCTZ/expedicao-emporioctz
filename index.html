@@ -105,6 +105,8 @@ header .hfunc strong{display:block;font-size:12px;}
 .ext-scanner-input{width:100%;padding:10px 14px;border:2px solid rgba(255,255,255,.3);border-radius:8px;background:rgba(255,255,255,.1);color:white;font-size:14px;font-family:monospace;outline:none;}
 .ext-scanner-input::placeholder{color:rgba(255,255,255,.4);}
 .ext-scanner-input:focus{border-color:var(--accent);}
+.scan-ready{margin-top:8px;text-align:center;font-size:13px;font-weight:800;padding:7px;border-radius:8px;background:rgba(255,255,255,.12);color:rgba(255,255,255,.6);transition:all .2s;}
+.scan-ready.on{background:#1b5e20;color:#a5d6a7;box-shadow:0 0 0 2px rgba(102,187,106,.5);}
 /* SCANNER CAMERA */
 .mkt-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:420px;margin:0 auto 14px;}
 .mkt-btn{padding:10px 6px;border:2px solid #e0e0e0;border-radius:10px;background:white;font-size:11px;font-weight:700;color:#555;cursor:pointer;text-align:center;transition:all .15s;}
@@ -559,13 +561,14 @@ header .hfunc strong{display:block;font-size:12px;}
       <div class="vol-bar-label"><span>Progresso</span><span id="recVolPct">0%</span></div>
       <div class="vol-bar-bg"><div class="vol-bar-fill" id="recVolBar" style="width:0%"></div></div>
     </div>
-    <div class="ext-scanner-box">
-      <label>📡 Scanner Bluetooth / Externo — digite aqui</label>
-      <input class="ext-scanner-input" id="recExtInput" placeholder="Aponte o leitor para o código da caixa..." autocomplete="off" autocorrect="off" spellcheck="false"/>
+    <div class="ext-scanner-box" id="recExtBox" onclick="recFocusScanner()">
+      <label>📡 Leitor Bluetooth / Externo</label>
+      <input class="ext-scanner-input" id="recExtInput" inputmode="none" placeholder="Pronto para bipar a caixa..." autocomplete="off" autocorrect="off" spellcheck="false"/>
+      <div id="recScanReady" class="scan-ready">⚪ Toque aqui para ativar o leitor</div>
     </div>
     <div class="scan-mode-toggle">
-      <button class="scan-mode-btn selected" id="recModeQR" onclick="recSetScanMode('qr',this)">📱 QR Code</button>
-      <button class="scan-mode-btn" id="recModeBar" onclick="recSetScanMode('barcode',this)">▌▌ Código de Barras</button>
+      <button class="scan-mode-btn" id="recModeQR" onclick="recSetScanMode('qr',this)">📱 QR Code</button>
+      <button class="scan-mode-btn selected" id="recModeBar" onclick="recSetScanMode('barcode',this)">▌▌ Código de Barras</button>
     </div>
     <div id="rec-reader" class="reader-box"></div>
     <div id="recScanStatus" class="scan-status waiting">📷 Use o scanner externo ou inicie a câmera</div>
@@ -1021,8 +1024,9 @@ async function expToggleScanner(){
   try{
     expQrCode=new Html5Qrcode('exp-reader');
     const QR=[Html5QrcodeSupportedFormats.QR_CODE,Html5QrcodeSupportedFormats.DATA_MATRIX];
-    const BAR=[Html5QrcodeSupportedFormats.CODE_128,Html5QrcodeSupportedFormats.CODE_39,Html5QrcodeSupportedFormats.EAN_13,Html5QrcodeSupportedFormats.EAN_8,Html5QrcodeSupportedFormats.UPC_A,Html5QrcodeSupportedFormats.UPC_E,Html5QrcodeSupportedFormats.ITF];
-    await expQrCode.start({facingMode:'environment'},{fps:10,qrbox:{width:260,height:260},formatsToSupport:expScanMode==='qr'?QR:BAR},(text)=>expAddPackage(text),()=>{});
+    const BAR=[Html5QrcodeSupportedFormats.CODE_128,Html5QrcodeSupportedFormats.CODE_39,Html5QrcodeSupportedFormats.CODE_93,Html5QrcodeSupportedFormats.EAN_13,Html5QrcodeSupportedFormats.EAN_8,Html5QrcodeSupportedFormats.UPC_A,Html5QrcodeSupportedFormats.UPC_E,Html5QrcodeSupportedFormats.ITF,Html5QrcodeSupportedFormats.CODABAR];
+    const ebox=Math.min(320,Math.round((window.innerWidth||360)*0.82));
+    await expQrCode.start({facingMode:'environment'},{fps:15,qrbox:{width:ebox,height:Math.round(ebox*0.62)},aspectRatio:1.3,formatsToSupport:expScanMode==='qr'?QR:BAR,experimentalFeatures:{useBarCodeDetectorIfSupported:true}},(text)=>expAddPackage(text),()=>{});
     expScannerActive=true;document.getElementById('expBtnCamera').textContent='⏹️ Parar Câmera';
     expSetStatus('expScanStatus','waiting','📷 Aponte para o QR Code ou código de barras');
   }catch(e){toast('❌ Câmera não acessível');}
@@ -1259,12 +1263,41 @@ let ncPendingBarcode='';
   let buf='',timer;
   inp.addEventListener('input',()=>{
     buf=inp.value;clearTimeout(timer);
-    timer=setTimeout(()=>{if(buf.trim().length>2){recProcessScan(buf.trim());inp.value='';buf='';}},300);
+    timer=setTimeout(()=>{if(buf.trim().length>2){recProcessScan(buf.trim());inp.value='';buf='';recFocusScanner();}},300);
   });
   inp.addEventListener('keydown',e=>{
-    if(e.key==='Enter'&&inp.value.trim().length>2){clearTimeout(timer);recProcessScan(inp.value.trim());inp.value='';buf='';e.preventDefault();}
+    if(e.key==='Enter'&&inp.value.trim().length>2){clearTimeout(timer);recProcessScan(inp.value.trim());inp.value='';buf='';e.preventDefault();recFocusScanner();}
+  });
+  inp.addEventListener('focus',recUpdateScanReady);
+  inp.addEventListener('blur',()=>{
+    recUpdateScanReady();
+    // Mantém o campo focado para o leitor BT continuar funcionando,
+    // mas só re-foca se o usuário NÃO tocou em outro botão/campo de propósito.
+    setTimeout(()=>{
+      if(recCurrentStep!==2)return;
+      if(document.getElementById('modalNovaCaixa').classList.contains('show'))return;
+      const ae=document.activeElement;
+      if(ae&&['INPUT','BUTTON','TEXTAREA','SELECT','A'].includes(ae.tagName))return;
+      inp.focus();
+    },180);
   });
 })();
+// Foca o campo do leitor (sem abrir teclado — inputmode=none)
+function recFocusScanner(){
+  const inp=document.getElementById('recExtInput');
+  if(!inp)return;
+  if(recCurrentStep!==2)return;
+  if(document.getElementById('modalNovaCaixa').classList.contains('show'))return;
+  try{inp.focus();}catch(e){}
+  recUpdateScanReady();
+}
+function recUpdateScanReady(){
+  const inp=document.getElementById('recExtInput'),el=document.getElementById('recScanReady');
+  if(!inp||!el)return;
+  const ready=(document.activeElement===inp);
+  el.textContent=ready?'🟢 Pronto — pode bipar':'⚪ Toque aqui para ativar o leitor';
+  el.className='scan-ready'+(ready?' on':'');
+}
 
 function recSaveSession(){localStorage.setItem('rec_session',JSON.stringify(recSession));localStorage.setItem('rec_known',JSON.stringify(recKnown));localStorage.setItem('rec_verif',JSON.stringify(recVerification));}
 function recSelectFornecedor(btn,name){
@@ -1400,8 +1433,9 @@ async function recToggleScanner(){
   try{
     recQrCode=new Html5Qrcode('rec-reader');
     const QR=[Html5QrcodeSupportedFormats.QR_CODE,Html5QrcodeSupportedFormats.DATA_MATRIX];
-    const BAR=[Html5QrcodeSupportedFormats.CODE_128,Html5QrcodeSupportedFormats.CODE_39,Html5QrcodeSupportedFormats.EAN_13,Html5QrcodeSupportedFormats.EAN_8,Html5QrcodeSupportedFormats.UPC_A,Html5QrcodeSupportedFormats.UPC_E,Html5QrcodeSupportedFormats.ITF];
-    await recQrCode.start({facingMode:'environment'},{fps:10,qrbox:{width:260,height:260},formatsToSupport:recScanMode==='qr'?QR:BAR},(text)=>recProcessScan(text),()=>{});
+    const BAR=[Html5QrcodeSupportedFormats.CODE_128,Html5QrcodeSupportedFormats.CODE_39,Html5QrcodeSupportedFormats.CODE_93,Html5QrcodeSupportedFormats.EAN_13,Html5QrcodeSupportedFormats.EAN_8,Html5QrcodeSupportedFormats.UPC_A,Html5QrcodeSupportedFormats.UPC_E,Html5QrcodeSupportedFormats.ITF,Html5QrcodeSupportedFormats.CODABAR];
+    const box=Math.min(320,Math.round((window.innerWidth||360)*0.82));
+    await recQrCode.start({facingMode:'environment'},{fps:15,qrbox:{width:box,height:Math.round(box*0.62)},aspectRatio:1.3,formatsToSupport:recScanMode==='qr'?QR:BAR,experimentalFeatures:{useBarCodeDetectorIfSupported:true}},(text)=>recProcessScan(text),()=>{});
     recScannerActive=true;document.getElementById('recBtnCamera').textContent='⏹️ Parar Câmera';
     recSetScanStatus('waiting','📷 Aponte para o código da caixa');
   }catch(e){toast('❌ Câmera não acessível');}
@@ -1410,6 +1444,7 @@ async function recStopScanner(){
   if(recQrCode&&recScannerActive){try{await recQrCode.stop();}catch(e){}recQrCode=null;}
   recScannerActive=false;document.getElementById('recBtnCamera').textContent='▶️ Iniciar Câmera';
   document.getElementById('rec-reader').innerHTML='';
+  setTimeout(recFocusScanner,200);
 }
 function recSetScanStatus(type,msg){const el=document.getElementById('recScanStatus');el.className='scan-status '+type;el.textContent=msg;}
 function recManualEntry(){
@@ -1678,7 +1713,7 @@ function ncUpdateBoxCountHint(){
   if(n>1)hint.innerHTML='✅ Vai registrar <b>'+n+' volumes</b> de uma vez';
   else hint.textContent='Bipe 1, registre várias (ex: pallet)';
 }
-function ncCancel(){document.getElementById('modalNovaCaixa').classList.remove('show');ncPendingBarcode='';ncMode='new';ncEditIdx=-1;toast('Cancelado');}
+function ncCancel(){document.getElementById('modalNovaCaixa').classList.remove('show');ncPendingBarcode='';ncMode='new';ncEditIdx=-1;toast('Cancelado');setTimeout(recFocusScanner,250);}
 
 // Abre o modal em qualquer modo (new/nobc/edit/catalog)
 function ncOpenModal(opts){
@@ -1726,7 +1761,7 @@ function ncConfirm(){
   if(!products.length){toast('⚠️ Informe produto e quantidade');return;}
   const boxCount=Math.max(1,parseInt(document.getElementById('ncBoxCount').value)||1);
   const barcode=ncPendingBarcode;
-  const closeModal=()=>document.getElementById('modalNovaCaixa').classList.remove('show');
+  const closeModal=()=>{document.getElementById('modalNovaCaixa').classList.remove('show');setTimeout(recFocusScanner,250);};
 
   if(ncMode==='edit'){
     const c=recSession.caixas[ncEditIdx];
@@ -1774,7 +1809,7 @@ function recGoToStep(n){
     document.getElementById('rec-page-'+pageMap[n]).classList.add('active');
   }
   if(n!==2&&recScannerActive)recStopScanner();
-  if(n===2){recShowMemoriaFornecedor();recUpdateScannerUI();}
+  if(n===2){recShowMemoriaFornecedor();recUpdateScannerUI();setTimeout(recFocusScanner,350);}
   if(n===3)recRenderConferencia();
   recUpdatePersistCounter();
   window.scrollTo(0,0);
