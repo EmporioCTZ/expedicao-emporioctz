@@ -333,6 +333,26 @@ header .hfunc strong{display:block;font-size:12px;}
 .rec-cat-item .rc-sub{font-size:11px;color:#888;margin-top:2px;word-break:break-all;}
 .rec-cat-item .rc-add{font-size:24px;color:var(--brand);font-weight:300;flex-shrink:0;}
 .rec-cat-empty{padding:16px;text-align:center;color:#aaa;font-size:12px;}
+/* CONFERÊNCIA — esperado claro + resultado automático */
+.conf-grid{display:flex;gap:10px;align-items:stretch;margin-bottom:10px;}
+.conf-bipado{flex:1;text-align:center;background:#f0f2f5;border-radius:10px;padding:8px;display:flex;flex-direction:column;justify-content:center;}
+.conf-bipado .cb-num{font-size:24px;font-weight:800;color:var(--brand);}
+.conf-bipado .cb-lbl{font-size:10px;color:#888;margin-top:2px;}
+.conf-exp{flex:1.3;background:#fff8e1;border:2px solid #ffe082;border-radius:10px;padding:8px 10px;}
+.conf-exp label{display:block;font-size:11px;font-weight:800;color:#e65100;margin-bottom:4px;}
+.conf-exp input{width:100%;border:1.5px solid #ffb300;border-radius:8px;padding:8px;font-size:22px;font-weight:800;text-align:center;color:#e65100;outline:none;background:white;}
+.conf-banner{text-align:center;font-size:14px;font-weight:800;padding:9px;border-radius:10px;}
+.conf-banner.none{background:#eceff1;color:#90a4ae;}
+.conf-banner.ok{background:#e8f5e9;color:#2e7d32;}
+.conf-banner.err{background:#ffebee;color:#c62828;}
+.conf-banner.over{background:#fff3e0;color:#e65100;}
+.conf-alert{border-radius:12px;padding:12px 14px;margin-bottom:14px;}
+.conf-alert.err{background:#ffebee;border:1.5px solid #ef9a9a;}
+.conf-alert.ok{background:#e8f5e9;border:1.5px solid #a5d6a7;}
+.conf-alert .ca-title{font-size:14px;font-weight:800;margin-bottom:4px;}
+.conf-alert.err .ca-title{color:#c62828;}
+.conf-alert.ok .ca-title{color:#2e7d32;}
+.conf-alert .ca-row{font-size:13px;color:#b71c1c;padding:2px 0;}
 /* SECONDARY BACK */
 .rec-sec-back{padding:0 0 12px;}
 .rec-sec-back button{background:none;border:none;color:var(--brand);font-weight:700;font-size:14px;cursor:pointer;padding:4px 0;display:flex;align-items:center;gap:4px;}
@@ -616,7 +636,9 @@ header .hfunc strong{display:block;font-size:12px;}
       <button class="btn-step-back" onclick="recGoToStep(2)">← Bipagem</button>
     </div>
     <div id="recConfVolCard" class="form-card" style="margin-bottom:14px"></div>
-    <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Conferência por Produto</div>
+    <div id="recConfResumo"></div>
+    <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Conferência por Produto</div>
+    <div style="font-size:12px;color:#888;margin-bottom:10px">Digite quanto a <b>NF diz que vem</b> de cada produto. O app calcula sozinho o que faltou. ⤵️</div>
     <div id="recConfProdList"></div>
     <div id="recConfEmpty" class="empty-state" style="display:none"><div class="icon">🔍</div><p>Bipe produtos para conferir.</p></div>
     <div style="margin-top:16px" id="recConfActions">
@@ -1383,7 +1405,16 @@ function recFinalizar(){
   const names=Object.keys(totals);
   const bipado=recVolCount(),nf=recSession.nfVolumes;
   const volOk=bipado===nf;
-  const allOk=volOk&&names.every(n=>recVerification[n]?.status==='ok');
+  const faltantes=names.map(n=>({n,i:recVerifInfo(n,totals)})).filter(x=>x.i.status==='err');
+  const allOk=volOk&&!faltantes.length;
+  // AVISO automático de divergências antes de finalizar
+  if(!recFinalized&&(!volOk||faltantes.length)){
+    let msg='⚠️ ATENÇÃO — divergências encontradas:\n\n';
+    if(!volOk)msg+=(bipado<nf?`• Volumes: FALTAM ${nf-bipado} (${bipado}/${nf})\n`:`• Volumes: ${bipado-nf} A MAIS (${bipado}/${nf})\n`);
+    faltantes.forEach(x=>{msg+=`• ${x.n}: faltam ${x.i.missing} un.\n`;});
+    msg+='\nFinalizar mesmo assim?';
+    if(!confirm(msg))return;
+  }
   if(!recFinalized){
     const hist=JSON.parse(localStorage.getItem('rec_history')||'[]');
     hist.push({data:now.toLocaleDateString('pt-BR'),hora:now.toLocaleTimeString('pt-BR'),fornecedor:recSession.fornecedor,nfNumero:recSession.nfNumero,nfVolumes:recSession.nfVolumes,totalCaixas:recSession.caixas.length,func:funcionario,produtos:totals});
@@ -1401,7 +1432,8 @@ function recFinalizar(){
     <div class="fin-row"><span>Produtos distintos</span><span>${names.length}</span></div>
     <div class="fin-row"><span>Unidades totais</span><span>${unidTotal}</span></div>
     <div class="fin-row"><span>Funcionário</span><span>${funcionario}</span></div>
-    <div class="fin-row"><span>Status</span><span>${allOk?'✅ Conforme NF':'⚠️ Divergências'}</span></div>`;
+    <div class="fin-row"><span>Status</span><span>${allOk?'✅ Conforme NF':'⚠️ Divergências'}</span></div>
+    ${faltantes.length?`<div class="fin-row"><span>Faltantes</span><span style="color:#ff8a80">${faltantes.map(x=>x.n+' (−'+x.i.missing+')').join('<br>')}</span></div>`:''}`;
   document.getElementById('recFinalizarOverlay').classList.add('show');
   toast('✅ Recebimento finalizado e registrado!');
 }
@@ -1550,23 +1582,49 @@ function recRenderProdutos(){
   emptyEl.style.display='none';
   listEl.innerHTML=names.map(name=>{const t=totals[name];return`<div class="prod-card"><div class="prod-header"><div class="prod-name">${name}</div><div class="prod-vol-badge">${t.boxes} cx.</div></div><div style="text-align:center;padding:10px;background:#f0f2f5;border-radius:10px"><div style="font-size:26px;font-weight:800;color:var(--brand)">${t.units}</div><div style="font-size:11px;color:#888">unidades</div></div></div>`;}).join('');
 }
+// Calcula situação de um produto: esperado x bipado (automático)
+function recVerifInfo(name,totals){
+  const t=totals||recGetProductTotals();
+  const exp=(recVerification[name]&&recVerification[name].expected)||0;
+  const units=t[name]?t[name].units:0;
+  let status='none',missing=0,extra=0;
+  if(exp>0){
+    if(units===exp)status='ok';
+    else if(units<exp){status='err';missing=exp-units;}
+    else{status='over';extra=units-exp;}
+  }
+  return{expected:exp,units,status,missing,extra,diff:exp>0?units-exp:null};
+}
 function recRenderConferencia(){
   const totals=recGetProductTotals(),names=Object.keys(totals);
   const bipado=recVolCount(),nf=recSession.nfVolumes;
   const volOk=bipado===nf,pct=nf?Math.min(100,Math.round(bipado/nf*100)):0;
   document.getElementById('recConfVolCard').innerHTML=`<div style="font-size:13px;font-weight:700;color:#555;margin-bottom:10px">📦 Volumes</div><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:6px"><span>Bipados: <b>${bipado}</b></span><span>NF: <b>${nf||'—'}</b></span></div><div style="background:#e0e0e0;border-radius:8px;height:16px;overflow:hidden"><div style="height:100%;border-radius:8px;width:${pct}%;background:${bipado>nf?'linear-gradient(90deg,#c62828,#ef9a9a)':'linear-gradient(90deg,#2e7d32,#66bb6a)'}"></div></div><div style="margin-top:8px"><span class="vol-status-badge ${!nf?'pend':volOk?'ok':'err'}">${!nf?'⏳ Sessão não iniciada':volOk?'✅ Volumes conferidos!':bipado>nf?`⚠️ Excesso: +${bipado-nf}`:`❌ Faltam ${nf-bipado}`}</span></div>`;
-  const listEl=document.getElementById('recConfProdList'),actEl=document.getElementById('recConfActions'),emptyEl=document.getElementById('recConfEmpty');
+  // Resumo automático de faltantes no topo
+  const resumoEl=document.getElementById('recConfResumo');
+  if(resumoEl){
+    const falt=names.map(n=>({n,i:recVerifInfo(n,totals)})).filter(x=>x.i.status==='err');
+    const semEsp=names.filter(n=>recVerifInfo(n,totals).expected===0).length;
+    if(falt.length){
+      resumoEl.innerHTML=`<div class="conf-alert err"><div class="ca-title">❌ ${falt.length} produto(s) com falta</div>${falt.map(x=>`<div class="ca-row">${x.n} — faltam <b>${x.i.missing}</b></div>`).join('')}</div>`;
+    }else if(names.length&&semEsp===0){
+      resumoEl.innerHTML=`<div class="conf-alert ok"><div class="ca-title">✅ Tudo confere com a NF</div></div>`;
+    }else{resumoEl.innerHTML='';}
+  }
+  const listEl=document.getElementById('recConfProdList'),emptyEl=document.getElementById('recConfEmpty');
   if(!names.length){listEl.innerHTML='';emptyEl.style.display='block';return;}
   emptyEl.style.display='none';
   listEl.innerHTML=names.map(name=>{
-    const t=totals[name],v=recVerification[name]||{expected:0,status:null,missing:0};
-    const diff=v.expected>0?t.units-v.expected:null;
-    return`<div class="prod-card"><div class="prod-header"><div class="prod-name">${name}</div><div class="prod-vol-badge">${t.boxes} cx.</div></div><div class="prod-stats"><div class="ps-box"><div class="ps-num">${t.units}</div><div class="ps-lbl">Bipado</div></div><div class="ps-box"><input type="number" placeholder="0" min="0" inputmode="numeric" style="width:100%;border:none;background:transparent;text-align:center;font-size:18px;font-weight:800;color:var(--brand);outline:none;padding:0" value="${v.expected||''}" onchange="recSetExpected('${name.replace(/'/g,"\\'")}',this.value)"><div class="ps-lbl">Esperado (NF)</div></div><div class="ps-box"><div class="ps-num ${diff===null?'':diff===0?'ok':'err'}">${diff===null?'—':diff===0?'✅':diff>0?'+'+diff:diff}</div><div class="ps-lbl">Diferença</div></div></div><div class="prod-status-row"><button class="status-btn ${v.status==='ok'?'ok-active':''}" onclick="recSetStatus('${name.replace(/'/g,"\\'")}','ok',this)">✅ OK</button><button class="status-btn ${v.status==='err'?'err-active':''}" onclick="recSetStatus('${name.replace(/'/g,"\\'")}','err',this)">❌ Faltou</button></div>${v.status==='err'?`<div class="missing-row"><label>Qtd. faltante:</label><input type="number" min="0" inputmode="numeric" value="${v.missing||''}" onchange="recSetMissing('${name.replace(/'/g,"\\'")}',this.value)" placeholder="Ex: 12"></div>`:''}</div>`;
+    const t=totals[name],inf=recVerifInfo(name,totals);
+    const esc=name.replace(/'/g,"\\'");
+    const banner=inf.expected===0?`<div class="conf-banner none">Informe quanto vem na NF ⤴️</div>`
+      :inf.status==='ok'?`<div class="conf-banner ok">✅ Confere — ${inf.units} un.</div>`
+      :inf.status==='err'?`<div class="conf-banner err">❌ Faltam ${inf.missing} un.</div>`
+      :`<div class="conf-banner over">⚠️ Sobra ${inf.extra} un.</div>`;
+    return`<div class="prod-card"><div class="prod-header"><div class="prod-name">${name}</div><div class="prod-vol-badge">${t.boxes} cx.</div></div><div class="conf-grid"><div class="conf-bipado"><div class="cb-num">${inf.units}</div><div class="cb-lbl">Bipado</div></div><div class="conf-exp"><label>Quanto vem na NF?</label><input type="number" min="0" inputmode="numeric" value="${inf.expected||''}" placeholder="0" onchange="recSetExpected('${esc}',this.value)"></div></div>${banner}</div>`;
   }).join('');
 }
-function recSetExpected(name,val){if(!recVerification[name])recVerification[name]={expected:0,status:null,missing:0};recVerification[name].expected=parseInt(val)||0;recSaveSession();recRenderConferencia();}
-function recSetStatus(name,status){if(!recVerification[name])recVerification[name]={expected:0,status:null,missing:0};recVerification[name].status=status;if(status==='ok')recVerification[name].missing=0;recSaveSession();recRenderConferencia();}
-function recSetMissing(name,val){if(!recVerification[name])recVerification[name]={expected:0,status:null,missing:0};recVerification[name].missing=parseInt(val)||0;recSaveSession();}
+function recSetExpected(name,val){if(!recVerification[name])recVerification[name]={expected:0};recVerification[name].expected=parseInt(val)||0;recSaveSession();recRenderConferencia();}
 
 // PDF RECEBIMENTO
 function recGerarPDF(){
@@ -1579,7 +1637,7 @@ function recGerarPDF(){
   doc.setTextColor(0,0,0);
   doc.autoTable({startY:y,theme:'grid',headStyles:{fillColor:[26,26,46],textColor:255,fontSize:9},bodyStyles:{fontSize:9},columnStyles:{0:{fontStyle:'bold',cellWidth:55}},body:[['Fornecedor',recSession.fornecedor],['Nota Fiscal',recSession.nfNumero],['Volumes NF',recSession.nfVolumes+' volumes'],['Volumes Bipados',recVolCount()+' volumes'],['Status Volumes',recVolCount()===recSession.nfVolumes?'✅ Conferido':'⚠️ Divergência'],['Funcionário',funcionario]],margin:{left:m,right:m}});
   y=doc.lastAutoTable.finalY+8;
-  const prodBody=names.map(name=>{const t=totals[name],v=recVerification[name]||{};const diff=v.expected>0?t.units-v.expected:null;return[name,String(t.units),v.expected||'—',diff===null?'—':diff===0?'✅ OK':diff>0?'+'+diff:String(diff),v.status==='ok'?'✅ OK':v.status==='err'?'❌ Falta '+v.missing:'—'];});
+  const prodBody=names.map(name=>{const inf=recVerifInfo(name,totals);return[name,String(inf.units),inf.expected||'—',inf.diff===null?'—':inf.diff===0?'✅ OK':inf.diff>0?'+'+inf.diff:String(inf.diff),inf.status==='ok'?'✅ OK':inf.status==='err'?'❌ Falta '+inf.missing:inf.status==='over'?'⚠️ +'+inf.extra:'—'];});
   doc.autoTable({startY:y,theme:'striped',headStyles:{fillColor:[26,26,46],textColor:255,fontSize:8},bodyStyles:{fontSize:8},head:[['Produto','Bipado','Esperado','Dif.','Status']],body:prodBody,margin:{left:m,right:m}});
   doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(150);doc.text(`Gerado por Recebimento Empório CTZ · ${now.toLocaleDateString('pt-BR')} às ${now.toLocaleTimeString('pt-BR')}`,pw/2,290,{align:'center'});
   doc.save(`Recebimento-NF${recSession.nfNumero}-${now.toLocaleDateString('pt-BR').replace(/\//g,'-')}.pdf`);
@@ -1588,7 +1646,7 @@ function recGerarPDF(){
 function recExportExcel(){
   const totals=recGetProductTotals(),names=Object.keys(totals);
   if(!names.length){toast('⚠️ Nenhum produto!');return;}
-  const rows=[['Produto','Unidades Bipadas','Esperado NF','Diferença','Status','Qtd. Faltante'],...names.map(n=>{const t=totals[n],v=recVerification[n]||{};const diff=v.expected>0?t.units-v.expected:null;return[n,t.units,v.expected||'',diff===null?'':diff,v.status==='ok'?'OK':v.status==='err'?'FALTA':'',v.missing||''];})];
+  const rows=[['Produto','Unidades Bipadas','Esperado NF','Diferença','Status','Qtd. Faltante'],...names.map(n=>{const inf=recVerifInfo(n,totals);return[n,inf.units,inf.expected||'',inf.diff===null?'':inf.diff,inf.status==='ok'?'OK':inf.status==='err'?'FALTA':inf.status==='over'?'SOBRA':'',inf.missing||''];})];
   const csv='﻿'+rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
   const url=URL.createObjectURL(blob);const a=document.createElement('a');
@@ -1599,8 +1657,8 @@ async function recEnviarWhatsApp(){
   const totals=recGetProductTotals(),names=Object.keys(totals);
   const bipado=recVolCount(),nf=recSession.nfVolumes;
   const now=new Date(),volOk=bipado===nf;
-  const prodLines=names.map(name=>{const t=totals[name],v=recVerification[name]||{};if(v.status==='ok')return`✅ ${name} — ${t.units} un. OK`;if(v.status==='err')return`❌ ${name} — ${t.units} bipadas${v.missing?' / FALTAM '+v.missing+' un.':''}`;return`📦 ${name} — ${t.units} unidades`;}).join('\n');
-  const allOk=volOk&&names.every(n=>recVerification[n]?.status==='ok');
+  const prodLines=names.map(name=>{const inf=recVerifInfo(name,totals);if(inf.status==='ok')return`✅ ${name} — ${inf.units} un. OK`;if(inf.status==='err')return`❌ ${name} — ${inf.units} bipadas / FALTAM ${inf.missing} un.`;if(inf.status==='over')return`⚠️ ${name} — ${inf.units} bipadas / SOBRA ${inf.extra} un.`;return`📦 ${name} — ${inf.units} unidades`;}).join('\n');
+  const allOk=volOk&&!names.some(n=>recVerifInfo(n,totals).status==='err');
   // Save to Firebase on send
   fbSave('recebimento',{data:now.toLocaleDateString('pt-BR'),hora:now.toLocaleTimeString('pt-BR'),funcionario,fornecedor:recSession.fornecedor,nfNumero:recSession.nfNumero,nfVolumes:nf,totalCaixas:bipado,produtos:totals});
   const text=encodeURIComponent(`📥 *RECEBIMENTO — EMPÓRIO CTZ*\n━━━━━━━━━━━━━━━━━━━━\n📅 ${now.toLocaleDateString('pt-BR')} às ${now.toLocaleTimeString('pt-BR')}\n🏭 Fornecedor: *${recSession.fornecedor}*\n📄 NF: *${recSession.nfNumero}*\n👤 Funcionário: ${funcionario}\n📦 Volumes: *${bipado}/${nf}* ${volOk?'✅':'❌'}${!volOk?' ('+Math.abs(bipado-nf)+(bipado>nf?' excesso':' faltantes')+')':''}\n\n*Produtos:*\n${prodLines}\n\n${allOk?'✅ *Tudo conforme NF.*':'⚠️ *Divergências encontradas — verificar itens acima.*'}\n\n_Empório CTZ — Sistema de Recebimento_`);
