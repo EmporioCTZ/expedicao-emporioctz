@@ -792,6 +792,10 @@ header .hfunc strong{display:block;font-size:12px;}
   <div class="nc-card">
     <h3 id="ncTitle">📦 Nova caixa — informe o produto</h3>
     <div class="nc-barcode" id="ncBarcode"></div>
+    <div id="ncBarcodeEditWrap" style="display:none;margin-bottom:14px">
+      <label style="display:block;font-size:11px;font-weight:800;color:#e65100;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Código da caixa (corrija se leu errado)</label>
+      <input type="text" id="ncBarcodeEdit" autocomplete="off" autocorrect="off" spellcheck="false" style="width:100%;padding:11px 12px;border:2px solid #ffb300;border-radius:9px;font-size:15px;font-family:monospace;outline:none;background:#fffdf5"/>
+    </div>
     <div id="ncOlistStatus" style="display:none"></div>
     <div class="nc-multi-row">
       <input type="checkbox" id="ncMulti" onchange="ncToggleMulti()">
@@ -1733,7 +1737,7 @@ function recRenderHistory(){
 
 // OLIST — busca por EAN e por nome (busca independente por linha de produto)
 const OLIST_API='/api/olist/produto';
-let ncMode='new',ncEditIdx=-1; // modos: new | nobc | edit | catalog
+let ncMode='new',ncEditIdx=-1,ncOrigBarcode=''; // modos: new | nobc | edit | catalog
 async function ncLookupEAN(ean){
   const el=document.getElementById('ncOlistStatus');
   el.className='nc-olist-status loading';el.textContent='🔍 Buscando no Olist...';el.style.display='block';
@@ -1848,6 +1852,10 @@ function ncOpenModal(opts){
   const titleEl=document.getElementById('ncTitle');
   titleEl.textContent=opts.mode==='edit'?'✏️ Editar esta caixa bipada':opts.mode==='nobc'?'🏷️ Caixa sem código':opts.mode==='catalog'?'✏️ Editar caixa do catálogo':'📦 Nova caixa — informe o produto';
   document.getElementById('ncBarcode').textContent=opts.barcode||'';
+  ncOrigBarcode=opts.barcode||'';
+  const editWrap=document.getElementById('ncBarcodeEditWrap');
+  if(opts.mode==='catalog'){editWrap.style.display='block';document.getElementById('ncBarcodeEdit').value=opts.barcode||'';document.getElementById('ncBarcode').style.display='none';}
+  else{editWrap.style.display='none';document.getElementById('ncBarcode').style.display='block';}
   const products=(opts.products&&opts.products.length)?opts.products:[{name:'',qty:''}];
   const multi=products.length>1;
   document.getElementById('ncMulti').checked=multi;
@@ -1901,11 +1909,18 @@ function ncConfirm(){
     closeModal();ncMode='new';ncEditIdx=-1;toast('✏️ Caixa atualizada');return;
   }
   if(ncMode==='catalog'){
-    const prev=recKnown[barcode]||{};
-    recKnown[barcode]={products,since:prev.since||new Date().toLocaleDateString('pt-BR'),supplier:prev.supplier||recSession.fornecedor||''};
+    const novoCod=(document.getElementById('ncBarcodeEdit').value||'').trim()||ncOrigBarcode;
+    const prev=recKnown[ncOrigBarcode]||{};
+    // se o código mudou, remove a entrada antiga (local + servidor)
+    if(novoCod!==ncOrigBarcode){
+      if(recKnown[novoCod]&&!confirm('Já existe uma caixa com o código '+novoCod+'. Substituir?'))return;
+      delete recKnown[ncOrigBarcode];
+      recDeleteCatalogItem(ncOrigBarcode);
+    }
+    recKnown[novoCod]={products,since:prev.since||new Date().toLocaleDateString('pt-BR'),supplier:prev.supplier||recSession.fornecedor||''};
     localStorage.setItem('rec_known',JSON.stringify(recKnown));
-    recSaveCatalogItem(barcode);
-    closeModal();recRenderCatalog();ncMode='new';toast('✏️ Catálogo atualizado');return;
+    recSaveCatalogItem(novoCod);
+    closeModal();recRenderCatalog();ncMode='new';toast(novoCod!==ncOrigBarcode?'✏️ Código corrigido!':'✏️ Catálogo atualizado');return;
   }
   if(ncMode==='nobc'){
     closeModal();
