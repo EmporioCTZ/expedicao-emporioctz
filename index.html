@@ -573,7 +573,7 @@ header .hfunc strong{display:block;font-size:12px;}
     <div id="rec-reader" class="reader-box"></div>
     <div id="recScanStatus" class="scan-status waiting">📷 Use o scanner externo ou inicie a câmera</div>
     <button class="btn btn-primary" id="recBtnCamera" onclick="recToggleScanner()">▶️ Iniciar Câmera</button>
-    <button class="btn btn-secondary" onclick="recManualEntry()">⌨️ Digitar manualmente</button>
+    <button class="btn btn-secondary" id="recKbBtn" onclick="recToggleKb()">⌨️ Digitar código (teclado)</button>
     <button class="rec-nobc-btn" onclick="recCaixaSemCodigo()">🏷️ Caixa sem código de barras</button>
     <div style="margin-top:16px">
       <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Últimas caixas</div>
@@ -1447,9 +1447,18 @@ async function recStopScanner(){
   setTimeout(recFocusScanner,200);
 }
 function recSetScanStatus(type,msg){const el=document.getElementById('recScanStatus');el.className='scan-status '+type;el.textContent=msg;}
-function recManualEntry(){
-  if(!recSession.started){toast('⚠️ Inicie uma sessão primeiro');return;}
-  const c=prompt('Digite o código de barras da caixa:');if(c&&c.trim())recProcessScan(c.trim());
+// Alterna o campo entre modo leitor (sem teclado) e modo digitação (com teclado)
+let recKbMode=false;
+function recToggleKb(){
+  if(!recSession.started){toast('⚠️ Inicie um recebimento primeiro');return;}
+  const inp=document.getElementById('recExtInput');
+  recKbMode=!recKbMode;
+  inp.inputMode=recKbMode?'text':'none';
+  inp.placeholder=recKbMode?'Digite o código e toque Enter/OK':'Pronto para bipar a caixa...';
+  document.getElementById('recKbBtn').textContent=recKbMode?'📡 Voltar ao leitor Bluetooth':'⌨️ Digitar código (teclado)';
+  document.getElementById('recExtBox').style.outline=recKbMode?'2px solid var(--accent)':'none';
+  inp.blur();setTimeout(()=>inp.focus(),50); // reaplica para o teclado aparecer/sumir
+  toast(recKbMode?'⌨️ Modo digitação — pode digitar':'📡 Modo leitor Bluetooth');
 }
 function recProcessScan(rawCode){
   const code=rawCode.trim();
