@@ -472,9 +472,9 @@ header .hfunc strong{display:block;font-size:12px;}
     </div>
     <div id="expFullCodeCard" style="display:none">
       <div class="full-code-card">
-        <label>📦 Código do Envio Full Shopee (obrigatório)</label>
+        <label>📦 Código do Envio Full / ASN Shopee (obrigatório)</label>
         <div class="full-code-input-row">
-          <input type="text" id="expFullCodeInput" placeholder="Ex: FBSINBR2026060902015" autocomplete="off" autocorrect="off" spellcheck="false"/>
+          <input type="text" id="expFullCodeInput" placeholder="Ex: INBRFSP... ou FBSINBR..." autocomplete="off" autocorrect="off" spellcheck="false"/>
           <button onclick="expSetFullCode(document.getElementById('expFullCodeInput').value)">✅ OK</button>
         </div>
         <div id="expFullCodeSet" style="display:none" class="full-code-set">
@@ -1067,7 +1067,7 @@ let sigDrawing=false,sigHasContent=false;
   inp.addEventListener('input',()=>{
     buf=inp.value;clearTimeout(timer);
     timer=setTimeout(()=>{
-      if(buf.trim().length>8&&/FBSINBR/i.test(buf)){expSetFullCode(buf.trim());inp.value='';buf='';}
+      if(buf.trim().length>8&&expExtractFullCode(buf)){expSetFullCode(buf.trim());inp.value='';buf='';}
     },300);
   });
   inp.addEventListener('keydown',e=>{
@@ -1107,15 +1107,21 @@ function expSelectMkt(btn){
     fcc.style.display='none';expClearFullCode();
   }
 }
+// Extrai o código do envio: aceita FBSINBR... (Envio Full) ou INBRFSP... (ASN)
+function expExtractFullCode(val){
+  const s=String(val||'').toUpperCase();
+  const m=s.match(/(FBSINBR[A-Z0-9]+|INBRFSP[A-Z0-9]+)/);
+  return m?m[1]:'';
+}
 function expSetFullCode(val){
-  const code=(val||'').trim().toUpperCase();
-  if(!code){toast('⚠️ Informe o código do Envio Full');return;}
-  if(!/^FBSINBR\d+$/i.test(code)){toast('⚠️ Código inválido. Use FBSINBR...');beepInvalid();return;}
+  if(!String(val||'').trim()){toast('⚠️ Informe o código do Envio Full / ASN');return;}
+  const code=expExtractFullCode(val);
+  if(!code){toast('⚠️ Código inválido. Use FBSINBR... ou a ASN INBRFSP...');beepInvalid();return;}
   expFullCode=code;
   document.getElementById('expFullCodeDisplay').textContent=code;
   document.getElementById('expFullCodeSet').style.display='flex';
   document.getElementById('expFullCodeInput').value='';
-  toast('✅ Envio Full: '+code.slice(-8));
+  toast('✅ Código do envio: '+code.slice(-8));
 }
 function expClearFullCode(){
   expFullCode='';
@@ -1160,7 +1166,7 @@ function expAddPackage(rawCode){
   if(code===expLastAdded.code&&now-expLastAdded.time<2500)return;
   expLastAdded={code,time:now};
   // Detectar QR do Envio Full e capturar automaticamente
-  if(/^FBSINBR\d+$/i.test(code)){expSetFullCode(code);return;}
+  if(expExtractFullCode(code)){expSetFullCode(code);return;}
   // Validação específica Shopee — aceita APENAS SPXBR...
   if(expSelectedMkt==='Shopee'){
     if(!expFullCode){
