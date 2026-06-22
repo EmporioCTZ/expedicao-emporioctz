@@ -644,7 +644,10 @@ header .hfunc strong{display:block;font-size:12px;}
     </div>
     <div class="ext-scanner-box" id="recExtBox" onclick="recFocusScanner()">
       <label>📡 Leitor Bluetooth / Externo</label>
-      <input class="ext-scanner-input" id="recExtInput" inputmode="none" placeholder="Pronto para bipar a caixa..." autocomplete="off" autocorrect="off" spellcheck="false"/>
+      <div style="display:flex;gap:8px;align-items:stretch">
+        <input class="ext-scanner-input" id="recExtInput" inputmode="none" placeholder="Pronto para bipar a caixa..." style="flex:1" autocomplete="off" autocorrect="off" spellcheck="false"/>
+        <button id="recExtOkBtn" onclick="event.stopPropagation();recExtSubmit()" style="display:none;padding:0 18px;background:var(--accent);color:var(--brand);border:none;border-radius:8px;font-weight:800;font-size:15px;cursor:pointer">OK</button>
+      </div>
       <div id="recScanReady" class="scan-ready">⚪ Toque aqui para ativar o leitor</div>
     </div>
     <div class="scan-mode-toggle">
@@ -654,7 +657,7 @@ header .hfunc strong{display:block;font-size:12px;}
     <div id="rec-reader" class="reader-box"></div>
     <div id="recScanStatus" class="scan-status waiting">📷 Use o scanner externo ou inicie a câmera</div>
     <button class="btn btn-primary" id="recBtnCamera" onclick="recToggleScanner()">▶️ Iniciar Câmera</button>
-    <button class="btn btn-secondary" id="recKbBtn" onclick="recToggleKb()">⌨️ Digitar código (teclado)</button>
+    <button class="btn btn-secondary" id="recKbBtn" onclick="recToggleKb()">⌨️ Digitar código manualmente</button>
     <button class="rec-nobc-btn" onclick="recCaixaSemCodigo()">🏷️ Caixa sem código de barras</button>
     <div style="margin-top:16px">
       <div style="font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Últimas caixas</div>
@@ -1437,10 +1440,12 @@ let ncPendingBarcode='';
   let buf='',timer;
   inp.addEventListener('input',()=>{
     buf=inp.value;clearTimeout(timer);
+    // No modo digitação manual NÃO auto-submete (deixa terminar de digitar; envia só no Enter/OK)
+    if(recKbMode)return;
     timer=setTimeout(()=>{if(buf.trim().length>2){recProcessScan(buf.trim());inp.value='';buf='';recFocusScanner();}},300);
   });
   inp.addEventListener('keydown',e=>{
-    if(e.key==='Enter'&&inp.value.trim().length>2){clearTimeout(timer);recProcessScan(inp.value.trim());inp.value='';buf='';e.preventDefault();recFocusScanner();}
+    if(e.key==='Enter'&&inp.value.trim().length>0){clearTimeout(timer);recProcessScan(inp.value.trim());inp.value='';buf='';e.preventDefault();recFocusScanner();}
   });
   inp.addEventListener('focus',recUpdateScanReady);
   inp.addEventListener('blur',()=>{
@@ -1677,11 +1682,21 @@ function recToggleKb(){
   const inp=document.getElementById('recExtInput');
   recKbMode=!recKbMode;
   inp.inputMode=recKbMode?'text':'none';
-  inp.placeholder=recKbMode?'Digite o código e toque Enter/OK':'Pronto para bipar a caixa...';
-  document.getElementById('recKbBtn').textContent=recKbMode?'📡 Voltar ao leitor Bluetooth':'⌨️ Digitar código (teclado)';
+  inp.placeholder=recKbMode?'Digite o código e toque OK →':'Pronto para bipar a caixa...';
+  document.getElementById('recKbBtn').textContent=recKbMode?'📡 Voltar ao leitor Bluetooth':'⌨️ Digitar código manualmente';
   document.getElementById('recExtBox').style.outline=recKbMode?'2px solid var(--accent)':'none';
-  inp.blur();setTimeout(()=>inp.focus(),50); // reaplica para o teclado aparecer/sumir
-  toast(recKbMode?'⌨️ Modo digitação — pode digitar':'📡 Modo leitor Bluetooth');
+  document.getElementById('recExtOkBtn').style.display=recKbMode?'block':'none';
+  inp.value='';inp.blur();setTimeout(()=>inp.focus(),50); // reaplica para o teclado aparecer/sumir
+  toast(recKbMode?'⌨️ Modo digitação — digite e toque OK':'📡 Modo leitor Bluetooth');
+}
+// Envia o que está digitado no campo (botão OK do modo manual)
+function recExtSubmit(){
+  const inp=document.getElementById('recExtInput');
+  const v=(inp.value||'').trim();
+  if(v.length<1){toast('⚠️ Digite o código primeiro');return;}
+  recProcessScan(v);
+  inp.value='';
+  if(recKbMode)setTimeout(()=>inp.focus(),60);
 }
 function recProcessScan(rawCode){
   const code=rawCode.trim();
@@ -1939,8 +1954,9 @@ function ncCreateRow(){
   const div=document.createElement('div');div.className='nc-prod-block';
   div.innerHTML=`<div class="nc-prod-head"><span class="nc-prod-num">Produto</span><button class="nc-prod-rm" onclick="ncRemoveRow(this)">✕</button></div>
     <div class="nc-row-search"><input type="text" class="nc-search" placeholder="🔍 Buscar no Olist por nome..." autocomplete="off" autocorrect="off" oninput="ncRowSearch(this)" onblur="ncBlurResults(this)"><div class="nc-olist-results"></div></div>
-    <div class="prod-input-labels"><span>Nome do Produto</span><span>Qtd/caixa</span></div>
+    <div class="prod-input-labels"><span>Nome do Produto</span><span>Qtd por caixa</span></div>
     <div class="prod-input-row"><input type="text" class="nc-name" placeholder="Nome do produto"><input type="number" class="nc-qty" placeholder="Qtd" inputmode="numeric" min="1"></div>
+    <div style="font-size:11px;color:#888;margin-top:4px">Informe acima a quantidade de produtos que vem em cada caixa.</div>
     <div class="nc-supcode" style="font-size:11px;color:#2e7d32;font-weight:700;margin-top:3px;min-height:14px"></div>
     <div class="nc-expected-wrap" style="display:none;margin-top:6px;background:#fff8e1;border:1.5px solid #ffe082;border-radius:9px;padding:8px 10px;align-items:center;gap:10px">
       <label style="flex:1;font-size:12px;font-weight:700;color:#e65100;margin:0">📋 Quanto vem na NF? (total esperado)</label>
