@@ -351,6 +351,15 @@ header .hfunc strong{display:block;font-size:12px;}
 .rec-cat-item .rc-sub{font-size:11px;color:#888;margin-top:2px;word-break:break-all;}
 .rec-cat-item .rc-add{font-size:24px;color:var(--brand);font-weight:300;flex-shrink:0;}
 .rec-cat-empty{padding:16px;text-align:center;color:#aaa;font-size:12px;}
+/* NOTAS FISCAIS — múltiplas */
+.nf-list-labels{display:flex;gap:8px;margin-bottom:4px;}
+.nf-list-labels span:first-child{flex:2;font-size:11px;font-weight:600;color:#888;text-transform:uppercase;}
+.nf-list-labels span:last-child{flex:1;min-width:80px;font-size:11px;font-weight:600;color:#888;text-transform:uppercase;}
+.nf-row{display:flex;gap:8px;margin-bottom:8px;align-items:center;}
+.nf-row .nf-num{flex:2;padding:11px 12px;border:2px solid #e0e0e0;border-radius:10px;font-size:15px;outline:none;}
+.nf-row .nf-vol{flex:1;min-width:80px;padding:11px 12px;border:2px solid #e0e0e0;border-radius:10px;font-size:15px;outline:none;}
+.nf-row input:focus{border-color:var(--brand);}
+.nf-row .nf-rm{background:none;border:none;color:#e57373;font-size:20px;cursor:pointer;padding:0 4px;flex-shrink:0;}
 /* CONFERÊNCIA — esperado claro + resultado automático */
 .conf-grid{display:flex;gap:10px;align-items:stretch;margin-bottom:10px;}
 .conf-bipado{flex:1;text-align:center;background:#f0f2f5;border-radius:10px;padding:8px;display:flex;flex-direction:column;justify-content:center;}
@@ -600,15 +609,22 @@ header .hfunc strong{display:block;font-size:12px;}
         <button class="fornecedor-btn" onclick="recSelectFornecedor(this,'FLX Trevisan')">FLX Trevisan</button>
       </div>
     </div>
-    <div class="form-card"><label>Número da Nota Fiscal</label><input type="text" id="recNFNum" placeholder="Ex: 123456" inputmode="numeric"/></div>
-    <div class="form-card"><label>Quantidade de Volumes (NF)</label><input type="number" id="recNFVol" placeholder="Ex: 48" inputmode="numeric" min="1"/></div>
-    <button class="btn btn-primary" onclick="recIniciar()">▶️ Iniciar Recebimento</button>
+    <div class="form-card">
+      <label>Notas Fiscais (pode ter mais de uma)</label>
+      <div class="nf-list-labels"><span>Número da NF</span><span>Volumes</span></div>
+      <div id="recNFList"></div>
+      <button class="btn btn-secondary" onclick="recAddNFRow()" style="max-width:210px;padding:9px;font-size:13px;margin-top:8px">➕ Adicionar outra nota</button>
+    </div>
+    <button class="btn btn-primary" id="recBtnIniciar" onclick="recIniciar()">▶️ Iniciar Recebimento</button>
     <div id="recNFInfo" style="display:none">
       <div class="form-card" style="background:#e8f5e9;border:2px solid #66bb6a">
         <div style="font-size:13px;font-weight:700;color:#2e7d32;margin-bottom:6px">✅ Sessão ativa</div>
         <div style="font-size:13px;color:#555" id="recNFSummary"></div>
       </div>
-      <button class="btn btn-danger" onclick="recReset()">🗑️ Cancelar e Nova Sessão</button>
+    </div>
+    <div id="recNFContinuar" style="display:none">
+      <button class="btn btn-success" onclick="recSalvarNF()">💾 Salvar alterações e continuar bipagem</button>
+      <button class="btn btn-danger" onclick="recReset()" style="margin-top:4px">🗑️ Cancelar e nova sessão</button>
     </div>
   </div>
   <!-- SCANNER -->
@@ -1408,7 +1424,7 @@ function expNovaColeta(){
 }
 
 // ═══════════════ RECEBIMENTO ═══════════════
-let recSession={fornecedor:'',nfNumero:'',nfVolumes:0,caixas:[],started:false};
+let recSession={fornecedor:'',nfList:[],nfNumero:'',nfVolumes:0,caixas:[],started:false};
 let recKnown=JSON.parse(localStorage.getItem('rec_known')||'{}');
 let recVerification={};
 let recScanMode='barcode',recQrCode=null;
@@ -1473,29 +1489,70 @@ function recLoadSession(){
   if(s)recSession=JSON.parse(s);
   recKnown=JSON.parse(localStorage.getItem('rec_known')||'{}');
   if(v)recVerification=JSON.parse(v);
-  if(recSession.started){
-    document.getElementById('recNFInfo').style.display='block';
-    document.getElementById('recNFSummary').textContent=`Fornecedor: ${recSession.fornecedor} | NF: ${recSession.nfNumero} | ${recSession.nfVolumes} volumes`;
-    document.getElementById('recFornecedor').value=recSession.fornecedor;
-    document.getElementById('recNFNum').value=recSession.nfNumero;
-    document.getElementById('recNFVol').value=recSession.nfVolumes;
-    recHighlightFornecedor(recSession.fornecedor);
-    recCurrentStep=2;
-  }
+  if(recSession.started){recCurrentStep=2;}
+  recRenderNFScreen();
+}
+// ─── NOTAS FISCAIS (múltiplas) ───────────────────────────────────────────────
+function recNFRowHtml(num,vol){return '<div class="nf-row"><input type="text" class="nf-num" placeholder="Ex: 123456" inputmode="numeric" value="'+(num||'')+'"><input type="number" class="nf-vol" placeholder="Ex: 48" inputmode="numeric" min="1" value="'+((vol!=null&&vol!==''&&vol!==0)?vol:'')+'"><button class="nf-rm" onclick="recRemoveNFRow(this)" title="Remover">✕</button></div>';}
+function recAddNFRow(num,vol){document.getElementById('recNFList').insertAdjacentHTML('beforeend',recNFRowHtml(num,vol));}
+function recRemoveNFRow(btn){
+  const rows=document.querySelectorAll('#recNFList .nf-row');
+  if(rows.length<=1){const r=btn.closest('.nf-row');r.querySelector('.nf-num').value='';r.querySelector('.nf-vol').value='';return;}
+  btn.closest('.nf-row').remove();
+}
+function recCollectNFs(){
+  const list=[];
+  document.querySelectorAll('#recNFList .nf-row').forEach(r=>{
+    const numero=r.querySelector('.nf-num').value.trim();
+    const volumes=parseInt(r.querySelector('.nf-vol').value)||0;
+    if(numero||volumes)list.push({numero,volumes});
+  });
+  return list;
+}
+function recRenderNFScreen(){
+  const cont=document.getElementById('recNFList');if(!cont)return;
+  cont.innerHTML='';
+  let list=(recSession.nfList&&recSession.nfList.length)?recSession.nfList:[];
+  if(!list.length&&recSession.nfNumero)list=[{numero:recSession.nfNumero,volumes:recSession.nfVolumes}]; // compat sessão antiga
+  if(!list.length)list=[{numero:'',volumes:''}];
+  list.forEach(n=>cont.insertAdjacentHTML('beforeend',recNFRowHtml(n.numero,n.volumes)));
+  document.getElementById('recFornecedor').value=recSession.fornecedor||'';
+  recHighlightFornecedor(recSession.fornecedor||'');
+  recUpdateNFScreen();
+}
+function recUpdateNFScreen(){
+  const active=!!recSession.started;
+  document.getElementById('recBtnIniciar').style.display=active?'none':'block';
+  document.getElementById('recNFContinuar').style.display=active?'block':'none';
+  document.getElementById('recNFInfo').style.display=active?'block':'none';
+  if(active)document.getElementById('recNFSummary').textContent=`Fornecedor: ${recSession.fornecedor} | NF: ${recSession.nfNumero||'—'} | ${recSession.nfVolumes} volumes`;
+}
+function recNFApply(nfs){
+  recSession.nfList=nfs;
+  recSession.nfNumero=nfs.map(n=>n.numero).filter(Boolean).join(', ');
+  recSession.nfVolumes=nfs.reduce((s,n)=>s+(n.volumes||0),0);
 }
 function recIniciar(){
   const f=document.getElementById('recFornecedor').value.trim();
-  const n=document.getElementById('recNFNum').value.trim();
-  const v=parseInt(document.getElementById('recNFVol').value);
+  const nfs=recCollectNFs();
   if(!f){toast('⚠️ Informe o fornecedor');return;}
-  if(!n){toast('⚠️ Informe a NF');return;}
-  if(!v||v<1){toast('⚠️ Informe os volumes');return;}
-  recSession={fornecedor:f,nfNumero:n,nfVolumes:v,caixas:[],started:true};
+  if(!nfs.some(n=>n.numero)){toast('⚠️ Informe ao menos uma nota fiscal');return;}
+  const totalVol=nfs.reduce((s,n)=>s+(n.volumes||0),0);
+  if(totalVol<1){toast('⚠️ Informe os volumes das notas');return;}
+  recSession={fornecedor:f,nfList:nfs,nfNumero:nfs.map(n=>n.numero).filter(Boolean).join(', '),nfVolumes:totalVol,caixas:[],started:true};
   recVerification={};recSaveSession();
-  document.getElementById('recNFInfo').style.display='block';
-  document.getElementById('recNFSummary').textContent=`Fornecedor: ${f} | NF: ${n} | ${v} volumes`;
-  recRenderAll();
+  recUpdateNFScreen();recRenderAll();
   recGoToStep(2);toast('✅ Sessão iniciada! Bipe as caixas.');
+}
+// Editar NF mantendo a bipagem em andamento
+function recSalvarNF(){
+  const f=document.getElementById('recFornecedor').value.trim();
+  const nfs=recCollectNFs();
+  if(!f){toast('⚠️ Informe o fornecedor');return;}
+  if(!nfs.some(n=>n.numero)){toast('⚠️ Informe ao menos uma nota fiscal');return;}
+  recSession.fornecedor=f;recNFApply(nfs);
+  recSaveSession();recUpdateNFScreen();recRenderAll();
+  recGoToStep(2);toast('💾 Notas atualizadas — bipagem continua');
 }
 function recReset(){
   if(!confirm('Cancelar e iniciar nova?'))return;
@@ -1509,14 +1566,13 @@ function recReset(){
     localStorage.setItem('rec_history',JSON.stringify(hist));
     fbSave('recebimento',{data:new Date().toLocaleDateString('pt-BR'),hora:new Date().toLocaleTimeString('pt-BR'),funcionario,fornecedor:recSession.fornecedor,nfNumero:recSession.nfNumero,nfVolumes:recSession.nfVolumes,totalCaixas:recVolCount(),produtos:totals});
   }
-  recSession={fornecedor:'',nfNumero:'',nfVolumes:0,caixas:[],started:false};
+  recSession={fornecedor:'',nfList:[],nfNumero:'',nfVolumes:0,caixas:[],started:false};
   recVerification={};recSaveSession();
-  document.getElementById('recNFInfo').style.display='none';
-  ['recFornecedor','recNFNum','recNFVol'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('recFornecedor').value='';
   document.querySelectorAll('.fornecedor-btn').forEach(b=>b.classList.remove('selected'));
   recFinalized=false;
   document.getElementById('recFinalizarOverlay').classList.remove('show');
-  recRenderAll();recRenderCatalog();recRenderHistory();
+  recRenderNFScreen();recRenderAll();recRenderCatalog();recRenderHistory();
   recGoToStep(1);toast('🔄 Nova sessão pronta');
 }
 function recFinalizar(){
@@ -1565,14 +1621,13 @@ function recVoltarCorrigir(){
 function recNovaSessao(){
   if(!confirm('Iniciar nova sessão? O recebimento atual será encerrado.'))return;
   if(recScannerActive)recStopScanner();
-  recSession={fornecedor:'',nfNumero:'',nfVolumes:0,caixas:[],started:false};
+  recSession={fornecedor:'',nfList:[],nfNumero:'',nfVolumes:0,caixas:[],started:false};
   recVerification={};recSaveSession();
-  document.getElementById('recNFInfo').style.display='none';
-  ['recFornecedor','recNFNum','recNFVol'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('recFornecedor').value='';
   document.querySelectorAll('.fornecedor-btn').forEach(b=>b.classList.remove('selected'));
   recFinalized=false;
   document.getElementById('recFinalizarOverlay').classList.remove('show');
-  recRenderAll();recRenderCatalog();recRenderHistory();
+  recRenderNFScreen();recRenderAll();recRenderCatalog();recRenderHistory();
   recGoToStep(1);toast('🔄 Nova sessão pronta');
 }
 function showRecPage(name,btn){
@@ -1886,7 +1941,11 @@ function ncCreateRow(){
     <div class="nc-row-search"><input type="text" class="nc-search" placeholder="🔍 Buscar no Olist por nome..." autocomplete="off" autocorrect="off" oninput="ncRowSearch(this)" onblur="ncBlurResults(this)"><div class="nc-olist-results"></div></div>
     <div class="prod-input-labels"><span>Nome do Produto</span><span>Qtd/caixa</span></div>
     <div class="prod-input-row"><input type="text" class="nc-name" placeholder="Nome do produto"><input type="number" class="nc-qty" placeholder="Qtd" inputmode="numeric" min="1"></div>
-    <div class="nc-supcode" style="font-size:11px;color:#2e7d32;font-weight:700;margin-top:3px;min-height:14px"></div>`;
+    <div class="nc-supcode" style="font-size:11px;color:#2e7d32;font-weight:700;margin-top:3px;min-height:14px"></div>
+    <div class="nc-expected-wrap" style="display:none;margin-top:6px;background:#fff8e1;border:1.5px solid #ffe082;border-radius:9px;padding:8px 10px;align-items:center;gap:10px">
+      <label style="flex:1;font-size:12px;font-weight:700;color:#e65100;margin:0">📋 Quanto vem na NF? (total esperado)</label>
+      <input type="number" class="nc-expected" inputmode="numeric" min="0" placeholder="0" style="width:80px;padding:7px;border:1.5px solid #ffb300;border-radius:8px;font-size:16px;font-weight:800;text-align:center;color:#e65100;outline:none;background:white">
+    </div>`;
   return div;
 }
 function ncRenumber(){
@@ -1944,7 +2003,11 @@ function ncOpenModal(opts){
   const multi=products.length>1;
   document.getElementById('ncMulti').checked=multi;
   const rows=document.getElementById('ncRows');rows.innerHTML='';
-  products.forEach(p=>{const r=ncCreateRow();rows.appendChild(r);r.querySelector('.nc-name').value=p.name||'';const qv=(p.qty!=null&&p.qty!=='')?p.qty:'';r.querySelector('.nc-qty').value=qv;if(p.olistId)r.dataset.olistId=p.olistId;if(p.supplierCode){r.dataset.supCode=p.supplierCode;r.querySelector('.nc-supcode').textContent='cód. fornecedor: '+p.supplierCode;}});
+  const showExpected=(opts.mode==='new'||opts.mode==='nobc');
+  products.forEach(p=>{const r=ncCreateRow();rows.appendChild(r);r.querySelector('.nc-name').value=p.name||'';const qv=(p.qty!=null&&p.qty!=='')?p.qty:'';r.querySelector('.nc-qty').value=qv;if(p.olistId)r.dataset.olistId=p.olistId;if(p.supplierCode){r.dataset.supCode=p.supplierCode;r.querySelector('.nc-supcode').textContent='cód. fornecedor: '+p.supplierCode;}
+    const ew=r.querySelector('.nc-expected-wrap');
+    if(showExpected){ew.style.display='flex';const exist=p.name&&recVerification[p.name]&&recVerification[p.name].expected;if(exist)r.querySelector('.nc-expected').value=exist;}
+  });
   document.getElementById('ncAddBtn').style.display=multi?'block':'none';
   ncRenumber();
   const bc=document.getElementById('ncBoxCount');bc.value=opts.boxCount||1;ncUpdateBoxCountHint();
@@ -1970,7 +2033,7 @@ function recEditCaixa(idx){
   ncOpenModal({mode:'edit',editIdx:idx,barcode:c.barcode,products:c.products,boxCount:c.boxCount||1});
 }
 function ncConfirm(){
-  const products=[];
+  const products=[];const expectedMap={};
   document.querySelectorAll('#ncRows .nc-prod-block').forEach(b=>{
     const name=b.querySelector('.nc-name').value.trim();
     const qty=parseInt(b.querySelector('.nc-qty').value)||0;
@@ -1979,9 +2042,13 @@ function ncConfirm(){
       if(b.dataset.olistId)prod.olistId=b.dataset.olistId;
       if(b.dataset.supCode)prod.supplierCode=b.dataset.supCode;
       products.push(prod);
+      const exp=parseInt((b.querySelector('.nc-expected')||{}).value)||0;
+      if(exp>0)expectedMap[name]=exp;
     }
   });
   if(!products.length){toast('⚠️ Informe produto e quantidade');return;}
+  // guarda o esperado da NF informado na bipagem (modos new/nobc)
+  const aplicarEsperado=()=>{Object.keys(expectedMap).forEach(nm=>{if(!recVerification[nm])recVerification[nm]={expected:0};recVerification[nm].expected=expectedMap[nm];});};
   const boxCount=Math.max(1,parseInt(document.getElementById('ncBoxCount').value)||1);
   const barcode=ncPendingBarcode;
   const closeModal=()=>{document.getElementById('modalNovaCaixa').classList.remove('show');setTimeout(recFocusScanner,250);};
@@ -2007,6 +2074,7 @@ function ncConfirm(){
     closeModal();recRenderCatalog();ncMode='new';toast(novoCod!==ncOrigBarcode?'✏️ Código corrigido!':'✏️ Catálogo atualizado');return;
   }
   if(ncMode==='nobc'){
+    aplicarEsperado();
     closeModal();
     recAddCaixa(barcode,{products},{boxCount,noBarcode:true});
     return;
@@ -2015,6 +2083,7 @@ function ncConfirm(){
   recKnown[barcode]={products,since:(recKnown[barcode]&&recKnown[barcode].since)||new Date().toLocaleDateString('pt-BR'),supplier:recSession.fornecedor||''};
   localStorage.setItem('rec_known',JSON.stringify(recKnown));
   recSaveCatalogItem(barcode);
+  aplicarEsperado();
   closeModal();
   recAddCaixa(barcode,{products},{boxCount});
 }
@@ -2041,6 +2110,7 @@ function recGoToStep(n){
     document.getElementById('rec-page-'+pageMap[n]).classList.add('active');
   }
   if(n!==2&&recScannerActive)recStopScanner();
+  if(n===1)recRenderNFScreen();
   if(n===2){recShowMemoriaFornecedor();recUpdateScannerUI();setTimeout(recFocusScanner,350);}
   if(n===3)recRenderConferencia();
   recUpdatePersistCounter();
